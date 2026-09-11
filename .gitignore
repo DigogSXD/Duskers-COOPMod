@@ -1,0 +1,17 @@
+## Build Results
+bin/
+obj/
+*.dll.mdb
+*.pdb
+
+## Visual Studio & IDE
+.vs/
+.idea/
+*.user
+*.userprefs
+*.suo
+
+## Scratch & Temp
+scratch/
+*.log
+*.tmp
