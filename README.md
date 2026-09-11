@@ -15,8 +15,10 @@ Opere a ponte de comando de drones com seus amigos em tempo real: compartilhem o
 
 * 🎮 **Integração Oficial Steam P2P (Zero Configuração):** Convide amigos direto pela lista de amigos da Steam com **Shift+Tab** ou apertando **[I]**. Não precisa de portas, IP público, Hamachi nem Radmin VPN!
 * 🚀 **Tela de Carregamento Retrô CRT:** Ao aceitar o convite pela Steam, o jogo exibe uma tela autêntica em fósforo verde com telemetria SDR, barra de progresso dinâmica e autenticação de link antes de entrar na ponte de comando.
+* 🌌 **Sincronização de Galáxia, Frota & Save do Host:** Ao entrar na sala, o save do Host é enviado automaticamente para o convidado em segundo plano (em um slot isolado `SlotCoop`, preservando os saves locais do convidado 100% intactos). Ambos compartilham o mesmo universo, sucata, combustível e frota!
+* 🛸 **Movimentação Estratégica & Embarque Simultâneo:** No mapa estelar (Starmap), a movimentação da nave-mãe, viagens a sistemas, saltos hiperespaciais (Jump) e upgrades são sincronizados em tempo real. Ao clicar para embarcar numa nave abandonada, ambos são transportados juntos para a mesma missão!
 * 💻 **Terminal CRT Sincronizado em Tempo Real:** Comandos executados por qualquer operador aparecem instantaneamente na tela de todos os outros com o prefixo `[Operator X] > comando`.
-* 🤖 **Controle Total da Frota ("Todo mundo controla tudo"):** Todos os jogadores têm acesso completo a todos os drones (`1`, `2`, `3`, `4`), geradores, sensores e portas da nave.
+* 🤖 **Controle Individual da Visão e Compartilhado da Frota:** Dentro da missão de exploração, cada jogador tem sua própria tela/câmera (esquemática ou visão do drone) para explorar salas diferentes ao mesmo tempo, enquanto compartilham todos os drones (`1`, `2`, `3`, `4`), comandos e eclusas.
 * 👥 **Suporte a Múltiplos Jogadores:** Jogue em 2, 3, 4 ou mais operadores na mesma sessão sem limites artificiais.
 * 💾 **Sistema Seguro de 3 Slots de Save:** O jogo ganha um seletor de Saves no menu principal. O **Slot 1** mantém o seu progresso original intacto, enquanto os **Slots 2 e 3** podem ser usados para suas campanhas cooperativas.
 * 🔄 **Reconexão Rápida Sem Queda de Sessão:** Se a conexão de alguém oscilar, o Host continua a missão sem travar. O cliente pode se reconectar com uma única tecla (**[R]** no menu ou digitando `coop reconnect` no terminal).

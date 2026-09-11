@@ -11,6 +11,7 @@ namespace DuskersCoopMod.UI
         private readonly CSteamID _hostSteamId;
         private float _elapsedTime = 0f;
         private bool _connected = false;
+        private bool _saveSynced = false;
         private float _transitionTimer = 0f;
         private int _lastBarFilled = -1;
 
@@ -19,6 +20,7 @@ namespace DuskersCoopMod.UI
             _hostName = string.IsNullOrEmpty(hostName) ? "Host Bridge" : hostName;
             _hostSteamId = hostSteamId;
             CoopNetworkManager.OnHandshakeReceived += HandleHandshake;
+            CoopNetworkManager.OnSaveSynchronized += HandleSaveSync;
         }
 
         protected override void Initialize()
@@ -34,6 +36,12 @@ namespace DuskersCoopMod.UI
                 _connected = true;
                 RefreshScreen();
             }
+        }
+
+        private void HandleSaveSync()
+        {
+            _saveSynced = true;
+            RefreshScreen();
         }
 
         public override void LoadMenu()
@@ -91,9 +99,10 @@ namespace DuskersCoopMod.UI
                 okItem.OverridenColor = Color.green;
                 MenuPanelUI.Instance.AddMenuItem(okItem);
 
-                var readyItem = new DuskersMenuItem("> Operator authenticated. Synchronizing terminal...", KeyCode.None, null, num++);
+                string syncText = _saveSynced ? "> Host Galaxy & Fleet synchronized! [SlotCoop Active]" : "> Synchronizing Host Galaxy & Fleet...";
+                var readyItem = new DuskersMenuItem(syncText, KeyCode.None, null, num++);
                 readyItem.Disabled = true;
-                readyItem.OverridenColor = Color.cyan;
+                readyItem.OverridenColor = _saveSynced ? Color.green : Color.cyan;
                 MenuPanelUI.Instance.AddMenuItem(readyItem);
             }
             else
@@ -136,6 +145,7 @@ namespace DuskersCoopMod.UI
         private void CancelConnection()
         {
             CoopNetworkManager.OnHandshakeReceived -= HandleHandshake;
+            CoopNetworkManager.OnSaveSynchronized -= HandleSaveSync;
             SteamCoopManager.Instance?.LeaveLobby();
             CoopNetworkManager.Instance?.Disconnect();
             MenuPanelUI.Instance.Clear();
@@ -158,9 +168,10 @@ namespace DuskersCoopMod.UI
             if (_connected)
             {
                 _transitionTimer += Time.deltaTime;
-                if (_transitionTimer >= 0.8f)
+                if (_transitionTimer >= 1.2f)
                 {
                     CoopNetworkManager.OnHandshakeReceived -= HandleHandshake;
+                    CoopNetworkManager.OnSaveSynchronized -= HandleSaveSync;
                     MenuPanelUI.Instance.Clear();
                     MenuPanelUI.Instance.Reset();
                     new CoopMenuScreen();

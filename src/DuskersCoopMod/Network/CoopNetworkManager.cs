@@ -54,6 +54,7 @@ namespace DuskersCoopMod.Network
         public static CoopNetworkManager Instance { get; private set; }
 
         public static event Action<string> OnHandshakeReceived;
+        public static event Action OnSaveSynchronized;
 
         public NetworkRole Role { get; set; } = NetworkRole.None;
         public bool IsConnected
@@ -273,6 +274,18 @@ namespace DuskersCoopMod.Network
 
             SteamCoopManager.Instance?.LeaveLobby();
 
+            if (DuskersCoopMod.Save.SaveSlotManager.IsUsingCoopRemoteSlot)
+            {
+                DuskersCoopMod.Save.SaveSlotManager.IsUsingCoopRemoteSlot = false;
+                try
+                {
+                    GameFileHelper.EnsureGameFileDirectoriesExist();
+                    GameSaveFile.ReInitSetting();
+                    UniverseSaveFile.ReInitSetting();
+                }
+                catch { }
+            }
+
             if (Role != NetworkRole.None)
             {
                 Role = NetworkRole.None;
@@ -421,6 +434,15 @@ namespace DuskersCoopMod.Network
                         version = MOD_VERSION
                     });
                     client.Send(handshake);
+
+                    string saveBase64 = DuskersCoopMod.Save.CoopSaveSyncManager.PackageActiveSave(DuskersCoopMod.Save.SaveSlotManager.CurrentSlot);
+                    if (!string.IsNullOrEmpty(saveBase64))
+                    {
+                        client.Send(PacketWrapper.Create("SAVE_SYNC", "Host", new SaveSyncData
+                        {
+                            compressedBase64 = saveBase64
+                        }));
+                    }
 
                     // Broadcast to other operators
                     BroadcastPacket(PacketWrapper.Create("SYSTEM_LOG", "Host", $"[COOP] {client.Name} joined the command bridge!"), client);
@@ -589,6 +611,142 @@ namespace DuskersCoopMod.Network
                     {
                         PrintToLocalConsole($"[COOP] Handshake verified: Welcome {hs.playerName}! (v{hs.version})", ConsoleMessageType.Benefit);
                         OnHandshakeReceived?.Invoke(hs.playerName);
+                    }
+                    break;
+
+                case "SAVE_SYNC":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var syncData = packet.GetData<SaveSyncData>();
+                        if (syncData != null && !string.IsNullOrEmpty(syncData.compressedBase64))
+                        {
+                            bool ok = DuskersCoopMod.Save.CoopSaveSyncManager.ApplyReceivedSave(syncData.compressedBase64);
+                            if (ok)
+                            {
+                                PrintToLocalConsole("[COOP] Host save synchronized! Shared galaxy and fleet loaded.", ConsoleMessageType.Benefit);
+                                OnSaveSynchronized?.Invoke();
+                            }
+                        }
+                    }
+                    break;
+
+                case "STRATEGIC_ACTION":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var actData = packet.GetData<StrategicActionData>();
+                        if (actData != null && !string.IsNullOrEmpty(actData.action))
+                        {
+                            HandleStrategicAction(actData);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        private void HandleStrategicAction(StrategicActionData data)
+        {
+            if (data == null || string.IsNullOrEmpty(data.action)) return;
+
+            switch (data.action)
+            {
+                case "LAUNCH_GAME":
+                    if (MainMenu.Instance != null)
+                    {
+                        try
+                        {
+                            var playMethod = HarmonyLib.AccessTools.Method(typeof(MainMenu), "MenuPlayGame", new Type[] { typeof(DuskersMenuItem) });
+                            playMethod?.Invoke(MainMenu.Instance, new object[] { null });
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DuskersCoopMod] Error auto-launching game on client: {ex}");
+                        }
+                    }
+                    break;
+
+                case "TRAVEL_DUNGEON":
+                    if (GalaxyMapManager.Instance != null)
+                    {
+                        try
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
+                            var tr = HarmonyLib.Traverse.Create(GalaxyMapManager.Instance);
+                            StarSystemInfo selSys = tr.Field("_selectedStarSystem").GetValue<StarSystemInfo>();
+                            if (selSys != null && selSys.Dungeons != null)
+                            {
+                                var target = selSys.Dungeons.Find(d => d.DisplayName == data.targetName || d.Name == data.targetName);
+                                if (target != null)
+                                {
+                                    tr.Property("SelectedDungeon").SetValue(target);
+                                    tr.Method("TravelToDungeon", new object[] { true })?.GetValue();
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DuskersCoopMod] Error handling remote TRAVEL_DUNGEON: {ex}");
+                        }
+                        finally
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
+                        }
+                    }
+                    break;
+
+                case "TRAVEL_SYSTEM":
+                    if (GalaxyMapManager.Instance != null)
+                    {
+                        try
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
+                            HarmonyLib.Traverse.Create(GalaxyMapManager.Instance).Method("TravelToStarSystem", new object[] { true })?.GetValue();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DuskersCoopMod] Error handling remote TRAVEL_SYSTEM: {ex}");
+                        }
+                        finally
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
+                        }
+                    }
+                    break;
+
+                case "JUMP":
+                    if (GalaxyMapManager.Instance != null)
+                    {
+                        try
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
+                            HarmonyLib.Traverse.Create(GalaxyMapManager.Instance).Method("ConfirmJump", new object[] { ModalWindowResult.Yes, data.targetName })?.GetValue();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DuskersCoopMod] Error handling remote JUMP: {ex}");
+                        }
+                        finally
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
+                        }
+                    }
+                    break;
+
+                case "BOARD_DUNGEON":
+                    if (GalaxyMapManager.Instance != null)
+                    {
+                        try
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
+                            HarmonyLib.Traverse.Create(GalaxyMapManager.Instance).Method("BoardCurrentDungeon")?.GetValue();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DuskersCoopMod] Error handling remote BOARD_DUNGEON: {ex}");
+                        }
+                        finally
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
+                        }
                     }
                     break;
             }

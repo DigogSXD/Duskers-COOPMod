@@ -72,4 +72,17 @@ namespace DuskersCoopMod.Network
     {
         public string message;
     }
+
+    [Serializable]
+    public class SaveSyncData
+    {
+        public string compressedBase64;
+    }
+
+    [Serializable]
+    public class StrategicActionData
+    {
+        public string action;
+        public string targetName;
+    }
 }

@@ -176,6 +176,16 @@ namespace DuskersCoopMod.UI
         {
             try
             {
+                var net = CoopNetworkManager.Instance;
+                if (net != null && net.Role == NetworkRole.Host && net.ConnectedCount > 0)
+                {
+                    Save.CoopSaveSyncManager.SyncToAllClients();
+                    net.BroadcastPacket(PacketWrapper.Create("STRATEGIC_ACTION", "Host", new StrategicActionData
+                    {
+                        action = "LAUNCH_GAME"
+                    }));
+                }
+
                 if (MainMenu.Instance != null)
                 {
                     MethodInfo playMethod = AccessTools.Method(typeof(MainMenu), "MenuPlayGame", new Type[] { typeof(DuskersMenuItem) });

@@ -269,6 +269,17 @@ namespace DuskersCoopMod.Network
                     });
                     SendP2PTo(senderId, handshake);
 
+                    // Synchronize Host's active save so guest shares the exact same galaxy, fleet and derelicts
+                    string saveBase64 = DuskersCoopMod.Save.CoopSaveSyncManager.PackageActiveSave(DuskersCoopMod.Save.SaveSlotManager.CurrentSlot);
+                    if (!string.IsNullOrEmpty(saveBase64))
+                    {
+                        string savePacket = PacketWrapper.Create("SAVE_SYNC", "Host", new SaveSyncData
+                        {
+                            compressedBase64 = saveBase64
+                        });
+                        SendP2PTo(senderId, savePacket);
+                    }
+
                     BroadcastP2P(PacketWrapper.Create("SYSTEM_LOG", "Host", $"[COOP] {op.Name} joined the command bridge!"), senderId);
                 }
 

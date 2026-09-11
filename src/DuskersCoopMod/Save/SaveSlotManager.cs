@@ -7,7 +7,14 @@ namespace DuskersCoopMod.Save
     public static class SaveSlotManager
     {
         public static int CurrentSlot { get; private set; } = 1;
+        public static bool IsUsingCoopRemoteSlot { get; set; } = false;
         private static string _configPath;
+
+        public static string GetCoopSlotPath()
+        {
+            string baseDoc = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "My Games");
+            return Path.Combine(Path.Combine(baseDoc, "Duskers"), "SlotCoop");
+        }
 
         static SaveSlotManager()
         {

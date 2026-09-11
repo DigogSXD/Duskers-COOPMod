@@ -11,6 +11,12 @@ namespace DuskersCoopMod.Patches
         [HarmonyPatch("GetBaseGameFileLocation")]
         public static void GetBaseGameFileLocation_Postfix(ref string __result)
         {
+            if (SaveSlotManager.IsUsingCoopRemoteSlot)
+            {
+                __result = SaveSlotManager.GetCoopSlotPath();
+                return;
+            }
+
             if (SaveSlotManager.CurrentSlot > 1)
             {
                 __result = Path.Combine(__result, "Slot" + SaveSlotManager.CurrentSlot);
