@@ -105,6 +105,12 @@ namespace DuskersCoopMod.UI
                     );
                 }, num++));
 
+                // Steam Invite Button
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[I]nvite via Steam (Shift+Tab)", KeyCode.I, (m) =>
+                {
+                    SteamCoopManager.Instance?.OpenInviteOverlay();
+                }, num++));
+
                 var slotDisplay = new DuskersMenuItem($"Active Save: Slot {SaveSlotManager.CurrentSlot}", KeyCode.None, null, num++);
                 slotDisplay.Disabled = true;
                 MenuPanelUI.Instance.AddMenuItem(slotDisplay);
@@ -147,6 +153,7 @@ namespace DuskersCoopMod.UI
 
                 MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[D]isconnect / Stop Server", KeyCode.D, (m) =>
                 {
+                    SteamCoopManager.Instance?.LeaveLobby();
                     net.Disconnect();
                     RefreshScreen();
                 }, num++));
@@ -238,6 +245,9 @@ namespace DuskersCoopMod.UI
             if (net != null)
             {
                 net.StartHost(net.CurrentPort);
+                string ip = SessionCodeHelper.GetPreferredLocalIp();
+                string sessionCode = SessionCodeHelper.Encode(ip, net.CurrentPort);
+                SteamCoopManager.Instance?.CreateLobby(ip, net.CurrentPort, sessionCode);
                 RefreshScreen();
             }
         }

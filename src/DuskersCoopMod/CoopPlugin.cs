@@ -32,6 +32,10 @@ namespace DuskersCoopMod
                 netGo.AddComponent<CoopNetworkManager>();
                 DontDestroyOnLoad(netGo);
 
+                GameObject steamGo = new GameObject("DuskersCoopSteamManager");
+                steamGo.AddComponent<SteamCoopManager>();
+                DontDestroyOnLoad(steamGo);
+
                 Logger.LogInfo($"{PLUGIN_NAME} ready. Type 'coop help' in terminal.");
             }
             catch (System.Exception ex)
