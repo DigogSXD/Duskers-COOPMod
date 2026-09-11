@@ -87,7 +87,9 @@ namespace DuskersCoopMod.UI
             if (SessionCodeHelper.Decode(clip, out ip, out port))
             {
                 CoopNetworkManager.Instance.ConnectToHost(ip, port);
-                MenuPanelUI.Instance.PopMenu(this);
+                MenuPanelUI.Instance.Clear();
+                MenuPanelUI.Instance.Reset();
+                new CoopMenuScreen();
             }
             else
             {

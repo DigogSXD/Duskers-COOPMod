@@ -57,7 +57,9 @@ namespace DuskersCoopMod.UI
                 MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"[C]onnect to Host ({ipToUse}:{portToUse})", KeyCode.C, (m) =>
                 {
                     CoopNetworkManager.Instance.ConnectToHost(ipToUse, portToUse);
-                    MenuPanelUI.Instance.PopMenu(2);
+                    MenuPanelUI.Instance.Clear();
+                    MenuPanelUI.Instance.Reset();
+                    new CoopMenuScreen();
                 }, num++));
             }
 

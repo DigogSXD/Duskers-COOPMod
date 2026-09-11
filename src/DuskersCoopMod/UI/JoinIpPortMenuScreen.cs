@@ -187,7 +187,9 @@ namespace DuskersCoopMod.UI
             if (_isValid)
             {
                 CoopNetworkManager.Instance.ConnectToHost(_parsedIp, _parsedPort);
-                MenuPanelUI.Instance.PopMenu(2);
+                MenuPanelUI.Instance.Clear();
+                MenuPanelUI.Instance.Reset();
+                new CoopMenuScreen();
             }
         }
 
