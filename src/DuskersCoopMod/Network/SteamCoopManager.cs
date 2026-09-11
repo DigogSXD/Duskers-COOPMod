@@ -171,11 +171,12 @@ namespace DuskersCoopMod.Network
             SendP2PToHost(helloPacket);
 
             string hostName = SteamFriends.GetFriendPersonaName(owner);
-            CoopNetworkManager.Instance.PrintToLocalConsole($"[COOP] Connected to {hostName}'s Bridge via Steam P2P!", ConsoleMessageType.SpecialInfo);
+            if (string.IsNullOrEmpty(hostName)) hostName = "Host Bridge";
+            CoopNetworkManager.Instance.PrintToLocalConsole($"[COOP] Connecting to {hostName}'s Bridge via Steam P2P...", ConsoleMessageType.SpecialInfo);
 
             MenuPanelUI.Instance.Clear();
             MenuPanelUI.Instance.Reset();
-            new CoopMenuScreen();
+            new CoopConnectingScreen(hostName, owner);
         }
 
         private void Update()

@@ -53,6 +53,8 @@ namespace DuskersCoopMod.Network
     {
         public static CoopNetworkManager Instance { get; private set; }
 
+        public static event Action<string> OnHandshakeReceived;
+
         public NetworkRole Role { get; set; } = NetworkRole.None;
         public bool IsConnected
         {
@@ -586,6 +588,7 @@ namespace DuskersCoopMod.Network
                     if (hs != null)
                     {
                         PrintToLocalConsole($"[COOP] Handshake verified: Welcome {hs.playerName}! (v{hs.version})", ConsoleMessageType.Benefit);
+                        OnHandshakeReceived?.Invoke(hs.playerName);
                     }
                     break;
             }
