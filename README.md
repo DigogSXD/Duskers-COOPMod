@@ -43,7 +43,7 @@ Instalar o mod leva menos de 2 minutos. Siga os passos abaixo:
 
 ### Passo 2: Instalar o Duskers CO-OP Mod
 1. Baixe o pacote pronto do mod:  
-   👉 [**Download DuskersCoopMod_v1.1.0.zip**](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.0.0.zip)  
+   👉 [**Download DuskersCoopMod_v1.1.0.zip**](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.0.zip)  
    *(ou baixe diretamente os arquivos na pasta `releases/` deste repositório).*
 2. Extraia o conteúdo para a pasta do Duskers, substituindo os arquivos se solicitado.  
    Isso instalará:
@@ -110,7 +110,7 @@ DuskersCoopMod/
 │       ├── CoopPlugin.cs        # Plugin BepInEx principal
 │       └── DuskersCoopMod.csproj
 ├── releases/                    # Pacotes compilados e configurados prontos para uso
-│   ├── DuskersCoopMod_v1.0.0.zip
+│   ├── DuskersCoopMod_v1.1.0.zip
 │   └── BepInEx/
 └── tools/
     └── coop_terminal_client.py  # Cliente CLI em Python para testes e monitoramento
