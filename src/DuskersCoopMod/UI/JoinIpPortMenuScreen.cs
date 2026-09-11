@@ -7,11 +7,11 @@ namespace DuskersCoopMod.UI
 {
     public class JoinIpPortMenuScreen : MenuScreenClass
     {
-        private string _targetIp = "127.0.0.1";
-        private int _targetPort = CoopNetworkManager.DEFAULT_PORT;
-        private string _ipBuffer = "";
+        private string _inputBuffer = "";
+        private string _parsedIp = "";
+        private int _parsedPort = CoopNetworkManager.DEFAULT_PORT;
+        private bool _isValid = false;
         private string _statusMsg = "";
-        private Color _statusColor = Color.green;
 
         public JoinIpPortMenuScreen() : base(null)
         {
@@ -19,66 +19,67 @@ namespace DuskersCoopMod.UI
 
         protected override void Initialize()
         {
-            ActiveText = "Join via Direct IP + Port";
+            ActiveText = "Direct IP Join";
             IgnoreCancel = false;
 
             var net = CoopNetworkManager.Instance;
-            if (net != null)
-            {
-                if (!string.IsNullOrEmpty(net.LastTargetIp))
-                {
-                    _targetIp = net.LastTargetIp;
-                    _targetPort = net.LastTargetPort;
-                }
-                else
-                {
-                    _targetPort = net.CurrentPort;
-                }
-            }
+            int defPort = net != null ? net.CurrentPort : CoopNetworkManager.DEFAULT_PORT;
 
-            // Check if clipboard has an IP or IP:Port
+            // Check clipboard first
             string clip = (GUIUtility.systemCopyBuffer ?? string.Empty).Trim();
-            ParseAndApplyClipboard(clip, false);
+            if (TryParseAddress(clip, defPort, out _parsedIp, out _parsedPort))
+            {
+                _inputBuffer = clip;
+                _isValid = true;
+            }
+            else if (net != null && !string.IsNullOrEmpty(net.LastTargetIp))
+            {
+                _parsedIp = net.LastTargetIp;
+                _parsedPort = net.LastTargetPort;
+                _inputBuffer = $"{_parsedIp}:{_parsedPort}";
+                _isValid = true;
+            }
+            else
+            {
+                _inputBuffer = $"127.0.0.1:{defPort}";
+                TryParseAddress(_inputBuffer, defPort, out _parsedIp, out _parsedPort);
+                _isValid = true;
+            }
         }
 
-        private bool ParseAndApplyClipboard(string text, bool verbose = true)
+        private static bool TryParseAddress(string raw, int defaultPort, out string ip, out int port)
         {
-            if (string.IsNullOrEmpty(text)) return false;
+            ip = "";
+            port = defaultPort;
 
-            if (text.Contains(":"))
+            if (string.IsNullOrEmpty(raw)) return false;
+
+            string clean = raw.Trim();
+
+            // Handle IP:PORT format
+            if (clean.Contains(":"))
             {
-                string[] parts = text.Split(':');
-                if (IPAddress.TryParse(parts[0], out _) && int.TryParse(parts[1], out int p) && p >= 1024 && p <= 65535)
+                string[] parts = clean.Split(':');
+                if (parts.Length == 2 && IPAddress.TryParse(parts[0], out _) && int.TryParse(parts[1], out int p))
                 {
-                    _targetIp = parts[0];
-                    _targetPort = p;
-                    _ipBuffer = _targetIp;
-                    if (verbose)
+                    if (p >= 1024 && p <= 65535)
                     {
-                        _statusMsg = $"Loaded IP {_targetIp} and Port {_targetPort} from clipboard!";
-                        _statusColor = Color.green;
+                        ip = parts[0];
+                        port = p;
+                        return true;
                     }
-                    return true;
                 }
+                return false;
             }
 
-            if (IPAddress.TryParse(text, out _))
+            // Handle IP only format
+            if (IPAddress.TryParse(clean, out _))
             {
-                _targetIp = text;
-                _ipBuffer = _targetIp;
-                if (verbose)
-                {
-                    _statusMsg = $"Loaded IP {_targetIp} from clipboard!";
-                    _statusColor = Color.green;
-                }
+                ip = clean;
+                port = defaultPort;
                 return true;
             }
 
-            if (verbose)
-            {
-                _statusMsg = $"Clipboard '{text}' is not a valid IP or IP:Port.";
-                _statusColor = Color.red;
-            }
             return false;
         }
 
@@ -87,118 +88,107 @@ namespace DuskersCoopMod.UI
             MenuPanelUI.Instance.Clear();
             int num = 0;
 
-            var header = new DuskersMenuItem("=== JOIN VIA DIRECT IP + PORT ===", KeyCode.None, null, num++);
+            var header = new DuskersMenuItem("=== DIRECT IP:PORT JOIN ===", KeyCode.None, null, num++);
             header.Disabled = true;
             header.OverridenColor = Color.cyan;
             MenuPanelUI.Instance.AddMenuItem(header);
 
-            var targetItem = new DuskersMenuItem($"Target Host: [ {_targetIp} : {_targetPort} ]", KeyCode.None, null, num++);
-            targetItem.Disabled = true;
-            targetItem.OverridenColor = Color.green;
-            MenuPanelUI.Instance.AddMenuItem(targetItem);
-
-            // Connect button
-            MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"[C]onnect to {_targetIp}:{_targetPort}", KeyCode.C, (m) =>
+            // Connect button if valid
+            if (_isValid)
             {
-                CoopNetworkManager.Instance.ConnectToHost(_targetIp, _targetPort);
-                MenuPanelUI.Instance.PopMenu(2);
-            }, num++));
-
-            MenuPanelUI.Instance.AddMenuItem(null);
-            num++;
-
-            // IP Configuration
-            var ipHeader = new DuskersMenuItem("--- Host IP Address ---", KeyCode.None, null, num++);
-            ipHeader.Disabled = true;
-            ipHeader.OverridenColor = Color.cyan;
-            MenuPanelUI.Instance.AddMenuItem(ipHeader);
-
-            string clip = (GUIUtility.systemCopyBuffer ?? string.Empty).Trim();
-            string clipPreview = clip.Length > 20 ? clip.Substring(0, 20) + "..." : clip;
-            string pasteLabel = string.IsNullOrEmpty(clip)
-                ? "[P]aste IP from Clipboard"
-                : $"[P]aste IP from Clipboard: '{clipPreview}'";
-
-            MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem(pasteLabel, KeyCode.P, (m) =>
-            {
-                ParseAndApplyClipboard(clip, true);
-                RefreshScreen();
-            }, num++));
-
-            string bufDisplay = string.IsNullOrEmpty(_ipBuffer) ? "<type digits 0-9 and dot>" : _ipBuffer + "_";
-            var bufItem = new DuskersMenuItem($"Type IP: [ {bufDisplay} ]", KeyCode.None, null, num++);
-            bufItem.Disabled = true;
-            bufItem.OverridenColor = Color.yellow;
-            MenuPanelUI.Instance.AddMenuItem(bufItem);
-
-            if (!string.IsNullOrEmpty(_ipBuffer))
-            {
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"[S]et IP: {_ipBuffer}", KeyCode.S, (m) =>
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"[C]onnect to {_parsedIp}:{_parsedPort}", KeyCode.C, (m) =>
                 {
-                    ApplyIpBuffer();
+                    ConnectNow();
                 }, num++));
-
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[X] Clear IP Buffer", KeyCode.X, (m) =>
-                {
-                    _ipBuffer = "";
-                    RefreshScreen();
-                }, num++));
+            }
+            else
+            {
+                var invalidItem = new DuskersMenuItem("Enter valid IP:PORT (e.g. 191.176.201.51:9600)", KeyCode.None, null, num++);
+                invalidItem.Disabled = true;
+                invalidItem.OverridenColor = Color.red;
+                MenuPanelUI.Instance.AddMenuItem(invalidItem);
             }
 
             MenuPanelUI.Instance.AddMenuItem(null);
             num++;
 
-            // Port Configuration
-            var portHeader = new DuskersMenuItem($"--- Port Configuration (Current: {_targetPort}) ---", KeyCode.None, null, num++);
-            portHeader.Disabled = true;
-            portHeader.OverridenColor = Color.cyan;
-            MenuPanelUI.Instance.AddMenuItem(portHeader);
+            // Input buffer
+            string display = string.IsNullOrEmpty(_inputBuffer) ? "<type IP:PORT or press P>" : _inputBuffer + "_";
+            var bufItem = new DuskersMenuItem($"Address: [ {display} ]", KeyCode.None, null, num++);
+            bufItem.Disabled = true;
+            bufItem.OverridenColor = _isValid ? Color.green : Color.yellow;
+            MenuPanelUI.Instance.AddMenuItem(bufItem);
 
-            MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"P[o]rt Settings: {_targetPort}", KeyCode.O, (m) =>
+            // Paste button
+            string clip = (GUIUtility.systemCopyBuffer ?? string.Empty).Trim();
+            string clipShort = clip.Length > 22 ? clip.Substring(0, 22) + "..." : clip;
+            string pasteText = string.IsNullOrEmpty(clip)
+                ? "[P]aste from Clipboard"
+                : $"[P]aste Clipboard ({clipShort})";
+
+            MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem(pasteText, KeyCode.P, (m) =>
             {
-                new PortMenuScreen();
+                PasteClipboard();
             }, num++));
 
-            MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[+] Add 100 to Port", KeyCode.Plus, (m) =>
+            if (!string.IsNullOrEmpty(_inputBuffer))
             {
-                _targetPort = Math.Min(65535, _targetPort + 100);
-                RefreshScreen();
-            }, num++));
-
-            MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[-] Subtract 100 from Port", KeyCode.Minus, (m) =>
-            {
-                _targetPort = Math.Max(1024, _targetPort - 100);
-                RefreshScreen();
-            }, num++));
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[X] Clear Address", KeyCode.X, (m) =>
+                {
+                    _inputBuffer = "";
+                    _isValid = false;
+                    _statusMsg = "";
+                    RefreshScreen();
+                }, num++));
+            }
 
             if (!string.IsNullOrEmpty(_statusMsg))
             {
                 MenuPanelUI.Instance.AddMenuItem(null);
                 num++;
-                var statItem = new DuskersMenuItem(_statusMsg, KeyCode.None, null, num++);
-                statItem.Disabled = true;
-                statItem.OverridenColor = _statusColor;
-                MenuPanelUI.Instance.AddMenuItem(statItem);
+                var stat = new DuskersMenuItem(_statusMsg, KeyCode.None, null, num++);
+                stat.Disabled = true;
+                stat.OverridenColor = _isValid ? Color.green : Color.red;
+                MenuPanelUI.Instance.AddMenuItem(stat);
             }
 
             base.LoadMenu();
         }
 
-        private void ApplyIpBuffer()
+        private void PasteClipboard()
         {
-            string candidate = _ipBuffer.Trim();
-            if (IPAddress.TryParse(candidate, out _))
+            string clip = (GUIUtility.systemCopyBuffer ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(clip))
             {
-                _targetIp = candidate;
-                _statusMsg = $"Target IP updated to {_targetIp}!";
-                _statusColor = Color.green;
+                _statusMsg = "Clipboard is empty.";
+                RefreshScreen();
+                return;
+            }
+
+            var net = CoopNetworkManager.Instance;
+            int defPort = net != null ? net.CurrentPort : CoopNetworkManager.DEFAULT_PORT;
+
+            _inputBuffer = clip;
+            if (TryParseAddress(_inputBuffer, defPort, out _parsedIp, out _parsedPort))
+            {
+                _isValid = true;
+                _statusMsg = $"Valid Address: {_parsedIp}:{_parsedPort}";
             }
             else
             {
-                _statusMsg = $"'{candidate}' is not a valid IPv4 address (e.g. 192.168.1.50).";
-                _statusColor = Color.red;
+                _isValid = false;
+                _statusMsg = $"Invalid format. Use IP:PORT (e.g. 191.176.201.51:9600)";
             }
             RefreshScreen();
+        }
+
+        private void ConnectNow()
+        {
+            if (_isValid)
+            {
+                CoopNetworkManager.Instance.ConnectToHost(_parsedIp, _parsedPort);
+                MenuPanelUI.Instance.PopMenu(2);
+            }
         }
 
         public override void Update()
@@ -207,52 +197,48 @@ namespace DuskersCoopMod.UI
 
             bool changed = false;
 
-            // Keep port synced with network manager port if changed in PortMenuScreen
-            var net = CoopNetworkManager.Instance;
-            if (net != null && net.CurrentPort != _targetPort && _targetPort == CoopNetworkManager.DEFAULT_PORT)
-            {
-                _targetPort = net.CurrentPort;
-                changed = true;
-            }
-
             if (!string.IsNullOrEmpty(Input.inputString))
             {
                 foreach (char c in Input.inputString)
                 {
-                    if (char.IsDigit(c) || c == '.')
+                    if (char.IsDigit(c) || c == '.' || c == ':')
                     {
-                        if (_ipBuffer.Length < 16)
+                        if (_inputBuffer.Length < 28)
                         {
-                            _ipBuffer += c;
+                            _inputBuffer += c;
                             changed = true;
                         }
                     }
-                    else if (c == '\b' && _ipBuffer.Length > 0)
+                    else if (c == '\b' && _inputBuffer.Length > 0)
                     {
-                        _ipBuffer = _ipBuffer.Substring(0, _ipBuffer.Length - 1);
+                        _inputBuffer = _inputBuffer.Substring(0, _inputBuffer.Length - 1);
                         changed = true;
                     }
                 }
             }
 
-            if (Input.GetKeyDown(KeyCode.Backspace) && _ipBuffer.Length > 0 && !changed)
+            if (Input.GetKeyDown(KeyCode.Backspace) && _inputBuffer.Length > 0 && !changed)
             {
-                _ipBuffer = _ipBuffer.Substring(0, _ipBuffer.Length - 1);
+                _inputBuffer = _inputBuffer.Substring(0, _inputBuffer.Length - 1);
                 changed = true;
-            }
-
-            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
-            {
-                if (!string.IsNullOrEmpty(_ipBuffer))
-                {
-                    ApplyIpBuffer();
-                    return;
-                }
             }
 
             if (changed)
             {
+                var net = CoopNetworkManager.Instance;
+                int defPort = net != null ? net.CurrentPort : CoopNetworkManager.DEFAULT_PORT;
+                _isValid = TryParseAddress(_inputBuffer, defPort, out _parsedIp, out _parsedPort);
+                _statusMsg = _isValid ? $"Ready: {_parsedIp}:{_parsedPort}" : "Type e.g. 191.176.201.51:9600";
                 RefreshScreen();
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+            {
+                if (_isValid)
+                {
+                    ConnectNow();
+                }
             }
         }
 
