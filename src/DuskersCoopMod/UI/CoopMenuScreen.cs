@@ -244,28 +244,7 @@ namespace DuskersCoopMod.UI
 
         private void OnJoinSelected(DuskersMenuItem item)
         {
-            string clipboard = (GUIUtility.systemCopyBuffer ?? string.Empty).Trim();
-
-            string targetIp;
-            int targetPort;
-
-            if (!string.IsNullOrEmpty(clipboard) && SessionCodeHelper.Decode(clipboard, out targetIp, out targetPort))
-            {
-                // Valid code found in clipboard!
-                CoopNetworkManager.Instance.ConnectToHost(targetIp, targetPort);
-                RefreshScreen();
-            }
-            else
-            {
-                // Clipboard empty or invalid code: show helper dialog
-                string currentClip = clipboard.Length > 20 ? clipboard.Substring(0, 20) + "..." : clipboard;
-                DialogUI.Instance.ShowDialog(
-                    "How to Join Session",
-                    $"1. Ask the Host for the Session Code (e.g. DSK-XXXX-XXXX-XXXX).\r\n2. Copy the code to your clipboard (Ctrl+C).\r\n3. Press [J]oin Session again!\r\n\r\nCurrent clipboard: '{(string.IsNullOrEmpty(currentClip) ? "<empty>" : currentClip)}'",
-                    ModalWindowType.OK,
-                    null
-                );
-            }
+            new JoinChoiceMenuScreen();
         }
     }
 }

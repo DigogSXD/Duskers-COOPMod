@@ -76,10 +76,12 @@ Inicie o Duskers normalmente pela Steam. No Menu Principal, você verá as opç�
 6. Pressione **`P`** (**Play Game**) para iniciar a missão!
 
 ### Se você for o CLIENT (Quem entra na sala):
-1. Copie o código que o Host te enviou para a sua área de transferência (<kbd>Ctrl</kbd>+<kbd>C</kbd> no Discord).
-2. Abra o Duskers e pressione **`M`** para abrir o menu Multiplayer.
-3. Pressione **`J`** (**Join Session**). O jogo detecta o código automaticamente e conecta na mesma hora!
-4. Pressione **`P`** (**Play Game**) para entrar no terminal da nave!
+1. No menu principal, pressione **`M`** e depois **`J`** (**Join Session**).
+2. Escolha o método de conexão:
+   * **`[C]` Join with Session Code:** Cole o código `DSK-XXXX-XXXX-XXXX` recebido do Host ou aperte **`P`** para colar da área de transferência e conectar!
+   * **`[I]` Join with Direct IP + Port:** Digite o IP do Host (ex: IP do Radmin, Hamachi ou rede local `192.168.1.50`) e configure a porta desejada (ex: `9600`). Se tiver copiado `IP:Porta` do Discord, basta apertar **`P`** que ele preenche tudo!
+   * **`[P]` Fast Join from Clipboard:** Atalho rápido que detecta automaticamente qualquer código ou IP que estiver na sua área de transferência.
+3. Assim que conectar, pressione **`P`** (**Play Game**) para entrar no terminal da nave junto com o Host!
 
 ---
 
