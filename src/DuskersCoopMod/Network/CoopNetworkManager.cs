@@ -53,9 +53,30 @@ namespace DuskersCoopMod.Network
     {
         public static CoopNetworkManager Instance { get; private set; }
 
-        public NetworkRole Role { get; private set; } = NetworkRole.None;
-        public bool IsConnected => Role == NetworkRole.Host ? _clients.Count > 0 : _isConnected;
-        public int ConnectedCount => Role == NetworkRole.Host ? _clients.Count : (_isConnected ? 1 : 0);
+        public NetworkRole Role { get; set; } = NetworkRole.None;
+        public bool IsConnected
+        {
+            get
+            {
+                if (SteamCoopManager.Instance != null && (SteamCoopManager.Instance.IsSteamHost || SteamCoopManager.Instance.IsSteamClient))
+                {
+                    return SteamCoopManager.Instance.SteamConnectedCount > 0 || SteamCoopManager.Instance.IsSteamClient;
+                }
+                return Role == NetworkRole.Host ? _clients.Count > 0 : _isConnected;
+            }
+        }
+
+        public int ConnectedCount
+        {
+            get
+            {
+                if (SteamCoopManager.Instance != null && (SteamCoopManager.Instance.IsSteamHost || SteamCoopManager.Instance.IsSteamClient))
+                {
+                    return SteamCoopManager.Instance.SteamConnectedCount;
+                }
+                return Role == NetworkRole.Host ? _clients.Count : (_isConnected ? 1 : 0);
+            }
+        }
         public string RemoteEndpointInfo => _remoteInfo;
 
         public const int DEFAULT_PORT = 7777;
@@ -248,6 +269,8 @@ namespace DuskersCoopMod.Network
             _singleStream = null;
             _singleClientSocket = null;
 
+            SteamCoopManager.Instance?.LeaveLobby();
+
             if (Role != NetworkRole.None)
             {
                 Role = NetworkRole.None;
@@ -257,6 +280,11 @@ namespace DuskersCoopMod.Network
 
         public List<string> GetConnectedOperatorsList()
         {
+            if (SteamCoopManager.Instance != null && (SteamCoopManager.Instance.IsSteamHost || SteamCoopManager.Instance.IsSteamClient))
+            {
+                return SteamCoopManager.Instance.GetSteamOperatorsList();
+            }
+
             List<string> list = new List<string>();
             if (Role == NetworkRole.Host)
             {
@@ -281,6 +309,11 @@ namespace DuskersCoopMod.Network
 
         public void BroadcastPacket(string rawJson, ConnectedClient exclude = null)
         {
+            if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamHost)
+            {
+                SteamCoopManager.Instance.BroadcastP2P(rawJson);
+            }
+
             if (Role != NetworkRole.Host) return;
 
             lock (_clientsLock)
@@ -297,6 +330,13 @@ namespace DuskersCoopMod.Network
 
         public void SendCommand(string command)
         {
+            if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamClient)
+            {
+                string p2pJson = PacketWrapper.Create("COMMAND", "Client", new CommandData { command = command });
+                SteamCoopManager.Instance.SendP2PToHost(p2pJson);
+                return;
+            }
+
             if (Role == NetworkRole.Client && _isConnected && _singleWriter != null)
             {
                 string json = PacketWrapper.Create("COMMAND", "Client", new CommandData { command = command });
@@ -489,7 +529,7 @@ namespace DuskersCoopMod.Network
             }
         }
 
-        private void EnqueueIncoming(PacketWrapper packet)
+        public void EnqueueIncoming(PacketWrapper packet)
         {
             lock (_incomingLock)
             {

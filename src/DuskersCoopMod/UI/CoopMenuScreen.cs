@@ -36,24 +36,8 @@ namespace DuskersCoopMod.UI
             if (!isHost && !isClient)
             {
                 // Standalone / Offline State
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[H]ost Session", KeyCode.H, OnHostSelected, num++));
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[J]oin Session", KeyCode.J, OnJoinSelected, num++));
-
-                if (net != null && !string.IsNullOrEmpty(net.LastTargetIp))
-                {
-                    MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"[R]econnect ({net.LastTargetIp}:{net.LastTargetPort})", KeyCode.R, (m) =>
-                    {
-                        net.Reconnect();
-                        RefreshScreen();
-                    }, num++));
-                }
-
-                // Port option
-                int portToShow = net != null ? net.CurrentPort : CoopNetworkManager.DEFAULT_PORT;
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"P[o]rt: {portToShow}", KeyCode.O, (m) =>
-                {
-                    new PortMenuScreen();
-                }, num++));
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[H]ost Session (Steam Lobby)", KeyCode.H, OnHostSelected, num++));
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[J]oin Session (Steam Friends)", KeyCode.J, OnJoinSelected, num++));
 
                 // Save slot option
                 MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"[S]ave Slot: Slot {SaveSlotManager.CurrentSlot}", KeyCode.S, (m) =>
@@ -64,49 +48,24 @@ namespace DuskersCoopMod.UI
                 MenuPanelUI.Instance.AddMenuItem(null);
                 num++;
 
-                var tip = new DuskersMenuItem("Tip: Copy code (Ctrl+C), then press J", KeyCode.None, null, num++);
+                var tip = new DuskersMenuItem("Steam Co-op: Invite friends via Shift+Tab or [I]nvite", KeyCode.None, null, num++);
                 tip.Disabled = true;
                 MenuPanelUI.Instance.AddMenuItem(tip);
 
-                var status = new DuskersMenuItem("Status: Offline (No session)", KeyCode.None, null, num++);
+                var status = new DuskersMenuItem("Status: Ready (Steamworks Active)", KeyCode.None, null, num++);
                 status.Disabled = true;
                 MenuPanelUI.Instance.AddMenuItem(status);
             }
             else if (isHost)
             {
                 // Host State
-                int hostPort = net != null ? net.CurrentPort : CoopNetworkManager.DEFAULT_PORT;
-                string ip = SessionCodeHelper.GetPreferredLocalIp();
-                string sessionCode = SessionCodeHelper.Encode(ip, hostPort);
-
-                var header = new DuskersMenuItem("=== HOST SESSION ===", KeyCode.None, null, num++);
+                var header = new DuskersMenuItem("=== HOST SESSION (STEAM LOBBY) ===", KeyCode.None, null, num++);
                 header.Disabled = true;
                 header.OverridenColor = Color.cyan;
                 MenuPanelUI.Instance.AddMenuItem(header);
 
-                var codeItem = new DuskersMenuItem($"Code: {sessionCode}", KeyCode.None, null, num++);
-                codeItem.Disabled = true;
-                codeItem.OverridenColor = Color.green;
-                MenuPanelUI.Instance.AddMenuItem(codeItem);
-
-                var portItem = new DuskersMenuItem($"Port: {hostPort}", KeyCode.None, null, num++);
-                portItem.Disabled = true;
-                portItem.OverridenColor = Color.yellow;
-                MenuPanelUI.Instance.AddMenuItem(portItem);
-
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[C]opy Code", KeyCode.C, (m) =>
-                {
-                    GUIUtility.systemCopyBuffer = sessionCode;
-                    DialogUI.Instance.ShowDialog(
-                        "Code Copied",
-                        $"Session Code:\r\n{sessionCode}\r\n\r\nCopied to clipboard!\r\nSend this to your friends on Discord/Steam.",
-                        ModalWindowType.OK,
-                        null
-                    );
-                }, num++));
-
                 // Steam Invite Button
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[I]nvite via Steam (Shift+Tab)", KeyCode.I, (m) =>
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[I]nvite Friends via Steam (Shift+Tab)", KeyCode.I, (m) =>
                 {
                     SteamCoopManager.Instance?.OpenInviteOverlay();
                 }, num++));
@@ -136,7 +95,7 @@ namespace DuskersCoopMod.UI
 
                 if (totalOps <= 1)
                 {
-                    var wait = new DuskersMenuItem(" - Waiting for friends...", KeyCode.None, null, num++);
+                    var wait = new DuskersMenuItem(" - Waiting for friends to accept invite...", KeyCode.None, null, num++);
                     wait.Disabled = true;
                     wait.OverridenColor = Color.yellow;
                     MenuPanelUI.Instance.AddMenuItem(wait);
@@ -244,17 +203,28 @@ namespace DuskersCoopMod.UI
             var net = CoopNetworkManager.Instance;
             if (net != null)
             {
-                net.StartHost(net.CurrentPort);
-                string ip = SessionCodeHelper.GetPreferredLocalIp();
-                string sessionCode = SessionCodeHelper.Encode(ip, net.CurrentPort);
-                SteamCoopManager.Instance?.CreateLobby(ip, net.CurrentPort, sessionCode);
+                if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamActive)
+                {
+                    SteamCoopManager.Instance.CreateHostLobby();
+                }
+                else
+                {
+                    net.StartHost();
+                }
                 RefreshScreen();
             }
         }
 
         private void OnJoinSelected(DuskersMenuItem item)
         {
-            new JoinChoiceMenuScreen();
+            if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamActive)
+            {
+                SteamCoopManager.Instance.OpenInviteOverlay();
+            }
+            else
+            {
+                new JoinChoiceMenuScreen();
+            }
         }
     }
 }
