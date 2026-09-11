@@ -87,12 +87,28 @@ namespace DuskersCoopMod.Patches
             switch (subCmd)
             {
                 case "host":
-                    int hostPort = CoopNetworkManager.DEFAULT_PORT;
+                    int hostPort = net.CurrentPort;
                     if (parts.Length >= 3 && int.TryParse(parts[2], out int parsedPort))
                     {
                         hostPort = parsedPort;
                     }
                     net.StartHost(hostPort);
+                    break;
+
+                case "port":
+                    if (parts.Length < 3)
+                    {
+                        net.PrintToLocalConsole($"[COOP] Current port: {net.CurrentPort}. Usage: coop port <1024-65535>", ConsoleMessageType.Info);
+                        return;
+                    }
+                    if (int.TryParse(parts[2], out int newPort))
+                    {
+                        net.SetPort(newPort);
+                    }
+                    else
+                    {
+                        net.PrintToLocalConsole("[COOP] Invalid port. Usage: coop port <number>", ConsoleMessageType.Error);
+                    }
                     break;
 
                 case "connect":
@@ -116,7 +132,7 @@ namespace DuskersCoopMod.Patches
                     else
                     {
                         targetIp = rawTarget;
-                        targetPort = CoopNetworkManager.DEFAULT_PORT;
+                        targetPort = net.CurrentPort;
                         if (parts.Length >= 4 && int.TryParse(parts[3], out int overridePort))
                         {
                             targetPort = overridePort;
@@ -142,7 +158,7 @@ namespace DuskersCoopMod.Patches
 
                 case "status":
                     string info = net.Role == NetworkRole.Host
-                        ? $"Role: Host | Operators: {net.ConnectedCount}"
+                        ? $"Role: Host | Port: {net.CurrentPort} | Operators: {net.ConnectedCount}"
                         : $"Role: Client | Connected: {net.IsConnected} | Host: {net.RemoteEndpointInfo}";
                     net.PrintToLocalConsole($"[COOP STATUS] {info}", ConsoleMessageType.SpecialInfo);
                     break;
@@ -160,7 +176,8 @@ namespace DuskersCoopMod.Patches
             if (net == null) return;
 
             net.PrintToLocalConsole("=== DUSKERS COOPERATIVE TERMINAL ===", ConsoleMessageType.SpecialInfo, ConsoleMessageFormat.HeaderFont);
-            net.PrintToLocalConsole("coop host [port]         - Start hosting server (default 7788)", ConsoleMessageType.Info);
+            net.PrintToLocalConsole($"coop host [port]         - Start hosting server (current: {net.CurrentPort})", ConsoleMessageType.Info);
+            net.PrintToLocalConsole("coop port <number>       - Change or view server port (1024-65535)", ConsoleMessageType.Info);
             net.PrintToLocalConsole("coop connect <code/ip>   - Connect to host (accepts DSK-XXXX code or IP)", ConsoleMessageType.Info);
             net.PrintToLocalConsole("coop reconnect           - Reconnect to previous host", ConsoleMessageType.Info);
             net.PrintToLocalConsole("coop disconnect          - Disconnect current session", ConsoleMessageType.Info);

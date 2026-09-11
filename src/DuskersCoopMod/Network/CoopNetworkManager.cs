@@ -58,8 +58,10 @@ namespace DuskersCoopMod.Network
         public int ConnectedCount => Role == NetworkRole.Host ? _clients.Count : (_isConnected ? 1 : 0);
         public string RemoteEndpointInfo => _remoteInfo;
 
-        public const int DEFAULT_PORT = 7788;
+        public const int DEFAULT_PORT = 7777;
         public const string MOD_VERSION = "1.1.0";
+
+        public int CurrentPort { get; private set; } = DEFAULT_PORT;
 
         // Multi-client Host data
         private TcpListener _server;
@@ -92,11 +94,33 @@ namespace DuskersCoopMod.Network
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
+
+                if (CoopPlugin.ConfigPort != null && CoopPlugin.ConfigPort.Value >= 1024 && CoopPlugin.ConfigPort.Value <= 65535)
+                {
+                    CurrentPort = CoopPlugin.ConfigPort.Value;
+                }
             }
             else
             {
                 Destroy(gameObject);
             }
+        }
+
+        public bool SetPort(int port)
+        {
+            if (port < 1024 || port > 65535)
+            {
+                PrintToLocalConsole($"[COOP] Invalid port {port}. Port must be between 1024 and 65535.", ConsoleMessageType.Warning);
+                return false;
+            }
+
+            CurrentPort = port;
+            if (CoopPlugin.ConfigPort != null)
+            {
+                CoopPlugin.ConfigPort.Value = port;
+            }
+            PrintToLocalConsole($"[COOP] Server port configured to {port}.", ConsoleMessageType.Info);
+            return true;
         }
 
         private void Update()
@@ -139,8 +163,11 @@ namespace DuskersCoopMod.Network
             }
         }
 
-        public void StartHost(int port = DEFAULT_PORT)
+        public void StartHost(int port = 0)
         {
+            if (port <= 0) port = CurrentPort;
+            else CurrentPort = port;
+
             Disconnect();
             Role = NetworkRole.Host;
             _isRunning = true;

@@ -18,8 +18,9 @@ Opere a ponte de comando de drones com seus amigos em tempo real: compartilhem o
 * 👥 **Suporte a Múltiplos Jogadores:** Jogue em 2, 3, 4 ou mais operadores na mesma sessão sem limites artificiais.
 * 📋 **Entrada em 1 Clique (Códigos de Sessão):** O Host gera um código amigável (ex: `DSK-1AE0-3323-6C1E`). O amigo só precisa copiar para a área de transferência (<kbd>Ctrl</kbd>+<kbd>C</kbd>) e pressionar **[J]** no menu!
 * 💾 **Sistema Seguro de 3 Slots de Save:** O jogo ganha um seletor de Saves no menu principal. O **Slot 1** mantém o seu progresso original intacto, enquanto os **Slots 2 e 3** podem ser usados para suas campanhas cooperativas.
+* 🔌 **Porta de Rede Customizável:** Mude a porta do servidor para qualquer valor (1024-65535) direto no menu (`P[o]rt: XXXX`), digitando no teclado, colando da área de transferência ou pelo terminal (`coop port <porta>`). O código da sessão codifica automaticamente a sua porta personalizada!
 * 🔄 **Reconexão Rápida Sem Queda de Sessão:** Se a conexão de alguém oscilar, o Host continua a missão sem travar. O cliente pode se reconectar com uma única tecla (**[R]** no menu ou digitando `coop reconnect` no terminal).
-* 🕹️ **Interface Retro CRT Nativa:** Menus `[M]ultiplayer` e `Sa[v]e Slots` integrados visualmente ao estilo original em fósforo verde do Duskers.
+* 🕹️ **Interface Retro CRT Nativa:** Menus `[M]ultiplayer`, `Sa[v]e Slots` e `P[o]rt Settings` integrados visualmente ao estilo original em fósforo verde do Duskers.
 
 ---
 
@@ -96,9 +97,10 @@ Você pode interagir e testar a conexão a qualquer momento durante a missão di
 
 | Comando | Descrição |
 | :--- | :--- |
-| `coop status` | Exibe o status da sessão, modo atual e operadores conectados |
+| `coop status` | Exibe o status da sessão, modo atual, porta e operadores conectados |
+| `coop port <número>` | Muda ou consulta a porta TCP usada para hospedar (1024 a 65535) |
 | `coop reconnect` | Reconecta instantaneamente ao Host anterior se sua internet oscilar |
-| `coop host [porta]` | Inicia um servidor cooperativo diretamente pelo terminal |
+| `coop host [porta]` | Inicia um servidor cooperativo diretamente pelo terminal (usa porta configurada ou especificada) |
 | `coop connect <código ou IP>` | Conecta a uma sessão remota via código ou IP direto |
 | `coop disconnect` | Sai da sessão cooperativa atual |
 | `coop help` | Exibe o manual de ajuda dos comandos cooperativos |

@@ -1,4 +1,5 @@
 using BepInEx;
+using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 using DuskersCoopMod.Network;
@@ -12,6 +13,8 @@ namespace DuskersCoopMod
         public const string PLUGIN_NAME = "Duskers Coop Mod";
         public const string PLUGIN_VERSION = "1.0.0";
 
+        public static ConfigEntry<int> ConfigPort;
+
         private Harmony _harmony;
 
         private void Awake()
@@ -20,6 +23,7 @@ namespace DuskersCoopMod
 
             try
             {
+                ConfigPort = Config.Bind("Network", "ServerPort", 7777, "The TCP port used for hosting multiplayer sessions (1024-65535)");
                 _harmony = new Harmony(PLUGIN_GUID);
                 _harmony.PatchAll();
                 Logger.LogInfo("Harmony patches applied successfully.");

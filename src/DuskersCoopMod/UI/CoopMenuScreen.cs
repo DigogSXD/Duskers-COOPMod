@@ -48,6 +48,13 @@ namespace DuskersCoopMod.UI
                     }, num++));
                 }
 
+                // Port option
+                int portToShow = net != null ? net.CurrentPort : CoopNetworkManager.DEFAULT_PORT;
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"P[o]rt: {portToShow}", KeyCode.O, (m) =>
+                {
+                    new PortMenuScreen();
+                }, num++));
+
                 // Save slot option
                 MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem($"[S]ave Slot: Slot {SaveSlotManager.CurrentSlot}", KeyCode.S, (m) =>
                 {
@@ -68,8 +75,9 @@ namespace DuskersCoopMod.UI
             else if (isHost)
             {
                 // Host State
+                int hostPort = net != null ? net.CurrentPort : CoopNetworkManager.DEFAULT_PORT;
                 string ip = SessionCodeHelper.GetPreferredLocalIp();
-                string sessionCode = SessionCodeHelper.Encode(ip, CoopNetworkManager.DEFAULT_PORT);
+                string sessionCode = SessionCodeHelper.Encode(ip, hostPort);
 
                 var header = new DuskersMenuItem("=== HOST SESSION ===", KeyCode.None, null, num++);
                 header.Disabled = true;
@@ -80,6 +88,11 @@ namespace DuskersCoopMod.UI
                 codeItem.Disabled = true;
                 codeItem.OverridenColor = Color.green;
                 MenuPanelUI.Instance.AddMenuItem(codeItem);
+
+                var portItem = new DuskersMenuItem($"Port: {hostPort}", KeyCode.None, null, num++);
+                portItem.Disabled = true;
+                portItem.OverridenColor = Color.yellow;
+                MenuPanelUI.Instance.AddMenuItem(portItem);
 
                 MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[C]opy Code", KeyCode.C, (m) =>
                 {
@@ -224,7 +237,7 @@ namespace DuskersCoopMod.UI
             var net = CoopNetworkManager.Instance;
             if (net != null)
             {
-                net.StartHost(CoopNetworkManager.DEFAULT_PORT);
+                net.StartHost(net.CurrentPort);
                 RefreshScreen();
             }
         }
