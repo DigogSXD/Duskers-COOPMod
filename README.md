@@ -1,6 +1,6 @@
 # 🛰️ Duskers CO-OP Mod
 
-[![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://github.com/DigogSXD/Duskers-COOPMod/releases)
+[![Release](https://img.shields.io/badge/Release-v1.1.0-green.svg)](https://github.com/DigogSXD/Duskers-COOPMod/releases)
 [![Game Version](https://img.shields.io/badge/Duskers-v1.205%2B-blue.svg)](https://store.steampowered.com/app/254320/Duskers/)
 [![Framework](https://img.shields.io/badge/BepInEx-5.4.21.0%20(x86)-orange.svg)](https://github.com/BepInEx/BepInEx/releases)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
@@ -13,14 +13,14 @@ Opere a ponte de comando de drones com seus amigos em tempo real: compartilhem o
 
 ## 🌟 Funcionalidades Principais (Features)
 
+* 🎮 **Integração Oficial Steam P2P (Zero Configuração):** Convide amigos direto pela lista de amigos da Steam com **Shift+Tab** ou apertando **[I]**. Não precisa de portas, IP público, Hamachi nem Radmin VPN!
+* 🚀 **Tela de Carregamento Retrô CRT:** Ao aceitar o convite pela Steam, o jogo exibe uma tela autêntica em fósforo verde com telemetria SDR, barra de progresso dinâmica e autenticação de link antes de entrar na ponte de comando.
 * 💻 **Terminal CRT Sincronizado em Tempo Real:** Comandos executados por qualquer operador aparecem instantaneamente na tela de todos os outros com o prefixo `[Operator X] > comando`.
 * 🤖 **Controle Total da Frota ("Todo mundo controla tudo"):** Todos os jogadores têm acesso completo a todos os drones (`1`, `2`, `3`, `4`), geradores, sensores e portas da nave.
 * 👥 **Suporte a Múltiplos Jogadores:** Jogue em 2, 3, 4 ou mais operadores na mesma sessão sem limites artificiais.
-* 📋 **Entrada em 1 Clique (Códigos de Sessão):** O Host gera um código amigável (ex: `DSK-1AE0-3323-6C1E`). O amigo só precisa copiar para a área de transferência (<kbd>Ctrl</kbd>+<kbd>C</kbd>) e pressionar **[J]** no menu!
 * 💾 **Sistema Seguro de 3 Slots de Save:** O jogo ganha um seletor de Saves no menu principal. O **Slot 1** mantém o seu progresso original intacto, enquanto os **Slots 2 e 3** podem ser usados para suas campanhas cooperativas.
-* 🔌 **Porta de Rede Customizável:** Mude a porta do servidor para qualquer valor (1024-65535) direto no menu (`P[o]rt: XXXX`), digitando no teclado, colando da área de transferência ou pelo terminal (`coop port <porta>`). O código da sessão codifica automaticamente a sua porta personalizada!
 * 🔄 **Reconexão Rápida Sem Queda de Sessão:** Se a conexão de alguém oscilar, o Host continua a missão sem travar. O cliente pode se reconectar com uma única tecla (**[R]** no menu ou digitando `coop reconnect` no terminal).
-* 🕹️ **Interface Retro CRT Nativa:** Menus `[M]ultiplayer`, `Sa[v]e Slots` e `P[o]rt Settings` integrados visualmente ao estilo original em fósforo verde do Duskers.
+* 🕹️ **Interface Retro CRT Nativa:** Menus `[M]ultiplayer`, `Sa[v]e Slots` e telas de status integradas visualmente ao estilo original em fósforo verde do Duskers.
 
 ---
 
@@ -43,7 +43,7 @@ Instalar o mod leva menos de 2 minutos. Siga os passos abaixo:
 
 ### Passo 2: Instalar o Duskers CO-OP Mod
 1. Baixe o pacote pronto do mod:  
-   👉 [**Download DuskersCoopMod_v1.0.0.zip**](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.0.0.zip)  
+   👉 [**Download DuskersCoopMod_v1.1.0.zip**](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.0.0.zip)  
    *(ou baixe diretamente os arquivos na pasta `releases/` deste repositório).*
 2. Extraia o conteúdo para a pasta do Duskers, substituindo os arquivos se solicitado.  
    Isso instalará:
@@ -63,33 +63,23 @@ Method = Awake
 
 ---
 
-## 🎮 Como Jogar
+## 🎮 Como Jogar com a Steam (Modo Recomendado)
 
 Inicie o Duskers normalmente pela Steam. No Menu Principal, você verá as opções **`[M]ultiplayer`** e **`Sa[v]e Slots`**.
 
 ### Se você for o HOST (Quem cria a sala):
 1. No menu principal, pressione **`M`** para entrar no menu de Multiplayer.
 2. (Opcional) Escolha o slot de save que quer usar (ex: Slot 2 para co-op).
-3. Pressione **`H`** para iniciar a sessão (**Host Session**).
-4. Pressione **`C`** para copiar o **Código da Sessão** (ex: `DSK-1AE0-3323-6C1E`) e envie para os seus amigos pelo Discord/WhatsApp.
-5. Quando os amigos entrarem, seus nomes aparecerão na lista de operadores da ponte.
+3. Pressione **`H`** para iniciar a sessão (**Host Session - Steam Lobby**).
+4. Pressione **`I`** (ou abra o **Shift+Tab**) e clique em **Convidar Amigos** na sua lista da Steam.
+5. Quando os amigos aceitarem, seus nomes aparecerão na lista de operadores da ponte.
 6. Pressione **`P`** (**Play Game**) para iniciar a missão!
 
-### Se você for o CLIENT (Quem entra na sala):
-1. No menu principal, pressione **`M`** e depois **`J`** (**Join Session**).
-2. Escolha o método de conexão:
-   * **`[C]` Join with Session Code:** Cole o código `DSK-XXXX-XXXX-XXXX` recebido do Host ou aperte **`P`** para colar da área de transferência e conectar!
-   * **`[I]` Join with Direct IP + Port:** Digite o IP do Host (ex: IP do Radmin, Hamachi ou rede local `192.168.1.50`) e configure a porta desejada (ex: `9600`). Se tiver copiado `IP:Porta` do Discord, basta apertar **`P`** que ele preenche tudo!
-   * **`[P]` Fast Join from Clipboard:** Atalho rápido que detecta automaticamente qualquer código ou IP que estiver na sua área de transferência.
-3. Assim que conectar, pressione **`P`** (**Play Game**) para entrar no terminal da nave junto com o Host!
-
----
-
-## 🌐 Conexão Online (Jogando pela Internet)
-
-Se você e seus amigos estiverem em casas diferentes:
-* **Opção Recomendada (Zero dor de cabeça):** Usem uma VPN virtual para jogos como **Radmin VPN** ou **ZeroTier / Hamachi**. Basta que ambos estejam na mesma rede virtual do Radmin e o código de sessão cuidará de todo o resto automaticamente!
-* **Port Forwarding:** Se o Host tiver IP público, basta abrir a porta TCP `7777` no roteador.
+### Se você for o CONVIDADO:
+1. Abra a conversa com o seu amigo na Steam ou a notificação do **Shift+Tab**.
+2. Clique em **"Entrar no Jogo"** (ou aceite o convite).
+3. Uma tela retrô de conexão (*"Establishing Comms Link"*) será exibida com telemetria ao vivo.
+4. Assim que o link for autenticado, você entrará na ponte de comando para operar os drones junto com o Host!
 
 ---
 
@@ -99,11 +89,9 @@ Você pode interagir e testar a conexão a qualquer momento durante a missão di
 
 | Comando | Descrição |
 | :--- | :--- |
-| `coop status` | Exibe o status da sessão, modo atual, porta e operadores conectados |
-| `coop port <número>` | Muda ou consulta a porta TCP usada para hospedar (1024 a 65535) |
-| `coop reconnect` | Reconecta instantaneamente ao Host anterior se sua internet oscilar |
-| `coop host [porta]` | Inicia um servidor cooperativo diretamente pelo terminal (usa porta configurada ou especificada) |
-| `coop connect <código ou IP>` | Conecta a uma sessão remota via código ou IP direto |
+| `coop status` | Exibe o status da sessão, modo atual, lobby Steam e operadores conectados |
+| `coop reconnect` | Reconecta instantaneamente ao Host se sua conexão oscilar |
+| `coop host` | Inicia um servidor cooperativo ou lobby Steam |
 | `coop disconnect` | Sai da sessão cooperativa atual |
 | `coop help` | Exibe o manual de ajuda dos comandos cooperativos |
 
@@ -115,10 +103,10 @@ Você pode interagir e testar a conexão a qualquer momento durante a missão di
 DuskersCoopMod/
 ├── src/
 │   └── DuskersCoopMod/
-│       ├── Network/             # TCP socket client/server, serialização de pacotes JSON
+│       ├── Network/             # Steamworks P2P (SDR), sockets TCP de fallback e pacotes JSON
 │       ├── Patches/             # Injeções Harmony no Console CRT, Menu e Saves
 │       ├── Save/                # Gerenciador de múltiplos Slots de Save (Slot 1, 2, 3)
-│       ├── UI/                  # Telas de menu integradas ao visual CRT nativo
+│       ├── UI/                  # Telas de menu integradas ao visual CRT nativo e Loading Screen
 │       ├── CoopPlugin.cs        # Plugin BepInEx principal
 │       └── DuskersCoopMod.csproj
 ├── releases/                    # Pacotes compilados e configurados prontos para uso
@@ -135,13 +123,13 @@ DuskersCoopMod/
 Requisitos:
 * [.NET SDK 6.0+](https://dotnet.microsoft.com/download)
 * Copiar as DLLs de referência de `Duskers/Duskers_Data/Managed/` e `BepInEx/core/`:
-  * `UnityEngine.dll`, `UnityEngine.UI.dll`, `Assembly-CSharp.dll`, `BepInEx.dll`, `0Harmony.dll`
+  * `UnityEngine.dll`, `UnityEngine.UI.dll`, `Assembly-CSharp.dll`, `Assembly-CSharp-firstpass.dll`, `BepInEx.dll`, `0Harmony.dll`
 
 Para compilar:
 ```powershell
 dotnet build src\DuskersCoopMod -c Release
 ```
-O arquivo `DuskersCoopMod.dll` será gerado na pasta `bin/Release/net35/`.
+O arquivo `DuskersCoopMod.dll` será gerado na pasta `bin/Release/net35/` e implantado automaticamente na pasta do jogo.
 
 ---
 
