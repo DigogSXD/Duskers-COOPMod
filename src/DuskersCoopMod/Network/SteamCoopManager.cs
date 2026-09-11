@@ -116,11 +116,21 @@ namespace DuskersCoopMod.Network
         private void OnLobbyEntered(LobbyEnter_t param)
         {
             CSteamID lobby = new CSteamID(param.m_ulSteamIDLobby);
+            CSteamID owner = SteamMatchmaking.GetLobbyOwner(lobby);
+            CSteamID myId = SteamUser.GetSteamID();
+
+            // If we are the Host, do NOT connect to ourselves or disconnect the server!
+            if (owner == myId || CoopNetworkManager.Instance.Role == NetworkRole.Host)
+            {
+                Debug.Log("[DuskersCoopMod] Entered own Steam Lobby as Host. Server listening and waiting for operators.");
+                return;
+            }
+
             string ip = SteamMatchmaking.GetLobbyData(lobby, "ip");
             string portStr = SteamMatchmaking.GetLobbyData(lobby, "port");
             string code = SteamMatchmaking.GetLobbyData(lobby, "code");
 
-            Debug.Log($"[DuskersCoopMod] Entered Steam Lobby! IP: {ip}, Port: {portStr}, Code: {code}");
+            Debug.Log($"[DuskersCoopMod] Guest entered Steam Lobby! IP: {ip}, Port: {portStr}, Code: {code}");
 
             if (!string.IsNullOrEmpty(ip) && int.TryParse(portStr, out int port))
             {
