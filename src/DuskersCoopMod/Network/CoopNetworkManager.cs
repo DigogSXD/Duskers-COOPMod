@@ -671,10 +671,15 @@ namespace DuskersCoopMod.Network
                         {
                             Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
                             var tr = HarmonyLib.Traverse.Create(GalaxyMapManager.Instance);
-                            StarSystemInfo selSys = tr.Field("_selectedStarSystem").GetValue<StarSystemInfo>();
+                            StarSystemInfo selSys = tr.Property("SelectedStarSystem").GetValue<StarSystemInfo>() 
+                                ?? tr.Field("_selectedStarSystem").GetValue<StarSystemInfo>();
                             if (selSys != null && selSys.Dungeons != null)
                             {
-                                var target = selSys.Dungeons.Find(d => d.DisplayName == data.targetName || d.Name == data.targetName);
+                                var target = selSys.Dungeons.Find(d => 
+                                    (!string.IsNullOrEmpty(d.DisplayName) && d.DisplayName.Equals(data.targetName, StringComparison.OrdinalIgnoreCase)) ||
+                                    (!string.IsNullOrEmpty(d.Name) && d.Name.Equals(data.targetName, StringComparison.OrdinalIgnoreCase)) ||
+                                    d.Id.ToString() == data.targetName ||
+                                    d.InternalId.ToString() == data.targetName);
                                 if (target != null)
                                 {
                                     tr.Property("SelectedDungeon").SetValue(target);
@@ -699,11 +704,76 @@ namespace DuskersCoopMod.Network
                         try
                         {
                             Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
-                            HarmonyLib.Traverse.Create(GalaxyMapManager.Instance).Method("TravelToStarSystem", new object[] { true })?.GetValue();
+                            var tr = HarmonyLib.Traverse.Create(GalaxyMapManager.Instance);
+                            var nodes = tr.Field("_starSystemNodes").GetValue<System.Collections.IList>();
+                            if (nodes != null)
+                            {
+                                foreach (object node in nodes)
+                                {
+                                    var info = HarmonyLib.Traverse.Create(node).Property("Info").GetValue<StarSystemInfo>();
+                                    if (info != null && (string.Equals(info.Name, data.targetName, StringComparison.OrdinalIgnoreCase) || info.Id.ToString() == data.targetName))
+                                    {
+                                        tr.Method("SetSelectedStarSystem", new object[] { info, false })?.GetValue();
+                                        break;
+                                    }
+                                }
+                            }
+                            tr.Method("TravelToStarSystem")?.GetValue();
                         }
                         catch (Exception ex)
                         {
                             Debug.LogError($"[DuskersCoopMod] Error handling remote TRAVEL_SYSTEM: {ex}");
+                        }
+                        finally
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
+                        }
+                    }
+                    break;
+
+                case "SHOW_SYSTEM_VIEW":
+                    if (GalaxyMapManager.Instance != null)
+                    {
+                        try
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
+                            var tr = HarmonyLib.Traverse.Create(GalaxyMapManager.Instance);
+                            var nodes = tr.Field("_starSystemNodes").GetValue<System.Collections.IList>();
+                            if (nodes != null)
+                            {
+                                foreach (object node in nodes)
+                                {
+                                    var info = HarmonyLib.Traverse.Create(node).Property("Info").GetValue<StarSystemInfo>();
+                                    if (info != null && (string.Equals(info.Name, data.targetName, StringComparison.OrdinalIgnoreCase) || info.Id.ToString() == data.targetName))
+                                    {
+                                        tr.Method("ShowStarSystemView", new object[] { info, false, true })?.GetValue();
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DuskersCoopMod] Error handling remote SHOW_SYSTEM_VIEW: {ex}");
+                        }
+                        finally
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
+                        }
+                    }
+                    break;
+
+                case "HIDE_SYSTEM_VIEW":
+                    if (GalaxyMapManager.Instance != null)
+                    {
+                        try
+                        {
+                            Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
+                            HarmonyLib.Traverse.Create(GalaxyMapManager.Instance).Method("HideStarSystemView")?.GetValue();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DuskersCoopMod] Error handling remote HIDE_SYSTEM_VIEW: {ex}");
                         }
                         finally
                         {

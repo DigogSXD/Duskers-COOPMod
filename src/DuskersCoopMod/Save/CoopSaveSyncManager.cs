@@ -129,6 +129,21 @@ namespace DuskersCoopMod.Save
                 GameSaveFile.ReInitSetting();
                 UniverseSaveFile.ReInitSetting();
 
+                // If GalaxyMapManager is currently active, refresh GUI and player data!
+                if (GalaxyMapManager.Instance != null)
+                {
+                    try
+                    {
+                        var tr = HarmonyLib.Traverse.Create(GalaxyMapManager.Instance);
+                        tr.Method("PlayerReset")?.GetValue();
+                        tr.Method("UpdateGUIVariables")?.GetValue();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[DuskersCoopMod] Non-critical error refreshing GalaxyMapManager after save sync: {ex.Message}");
+                    }
+                }
+
                 Debug.Log("[DuskersCoopMod] Successfully applied Host's synchronized save to SlotCoop!");
                 return true;
             }
