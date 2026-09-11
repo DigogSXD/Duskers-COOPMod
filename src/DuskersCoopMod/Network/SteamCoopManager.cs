@@ -22,7 +22,7 @@ namespace DuskersCoopMod.Network
         public CSteamID CurrentLobbyId { get; private set; } = CSteamID.Nil;
         public CSteamID HostSteamId { get; private set; } = CSteamID.Nil;
 
-        public bool IsSteamHost => CurrentLobbyId != CSteamID.Nil && HostSteamId == SteamUser.GetSteamID();
+        public bool IsSteamHost => HostSteamId != CSteamID.Nil && HostSteamId == SteamUser.GetSteamID();
         public bool IsSteamClient => HostSteamId != CSteamID.Nil && HostSteamId != SteamUser.GetSteamID();
 
         private readonly List<SteamConnectedOperator> _steamClients = new List<SteamConnectedOperator>();
@@ -69,21 +69,22 @@ namespace DuskersCoopMod.Network
 
         public void CreateHostLobby()
         {
-            if (!IsSteamActive)
-            {
-                CoopNetworkManager.Instance.PrintToLocalConsole("[COOP] Steam is not running. Starting local session.", ConsoleMessageType.Warning);
-                CoopNetworkManager.Instance.StartHost();
-                return;
-            }
-
             LeaveLobby();
             HostSteamId = SteamUser.GetSteamID();
             _steamClients.Clear();
             _operatorCounter = 2;
 
-            CoopNetworkManager.Instance.Role = NetworkRole.Host;
+            // Start TCP Host as local fallback (allows GreenLuma LAN / Radmin and Steam P2P simultaneously)
+            CoopNetworkManager.Instance.StartHost();
 
-            SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeFriendsOnly, 4);
+            if (!IsSteamActive)
+            {
+                CoopNetworkManager.Instance.PrintToLocalConsole("[COOP] Steam is not running. Local IP/Port server active.", ConsoleMessageType.Warning);
+                return;
+            }
+
+            // Use Public lobby so GreenLuma accounts can join without Valve master-server license verification
+            SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePublic, 4);
         }
 
         private void OnLobbyCreated(LobbyCreated_t param)
@@ -93,6 +94,9 @@ namespace DuskersCoopMod.Network
                 CurrentLobbyId = new CSteamID(param.m_ulSteamIDLobby);
                 string persona = SteamFriends.GetPersonaName();
                 SteamMatchmaking.SetLobbyData(CurrentLobbyId, "name", $"{persona}'s Duskers Bridge");
+                SteamMatchmaking.SetLobbyData(CurrentLobbyId, "appid", "254320");
+                SteamMatchmaking.SetLobbyData(CurrentLobbyId, "version", CoopNetworkManager.MOD_VERSION);
+                SteamMatchmaking.SetLobbyData(CurrentLobbyId, "host_steamid", HostSteamId.m_SteamID.ToString());
                 SteamMatchmaking.SetLobbyJoinable(CurrentLobbyId, true);
 
                 Debug.Log($"[DuskersCoopMod] Steam Lobby created: {CurrentLobbyId}. Shift+Tab invites enabled!");
@@ -177,6 +181,44 @@ namespace DuskersCoopMod.Network
             MenuPanelUI.Instance.Clear();
             MenuPanelUI.Instance.Reset();
             new CoopConnectingScreen(hostName, owner);
+        }
+
+        public void ConnectToHostBySteamId(CSteamID hostSteamId)
+        {
+            if (!IsSteamActive)
+            {
+                DialogUI.Instance?.ShowDialog(
+                    "Steam Not Available",
+                    "Steamworks is not initialized. Please ensure Steam or GreenLuma is running.",
+                    ModalWindowType.OK,
+                    null
+                );
+                return;
+            }
+
+            LeaveLobby();
+            HostSteamId = hostSteamId;
+            CoopNetworkManager.Instance.Role = NetworkRole.Client;
+
+            SteamNetworking.AcceptP2PSessionWithUser(hostSteamId);
+
+            string myPersona = SteamFriends.GetPersonaName();
+            string helloPacket = PacketWrapper.Create("STEAM_HELLO", myPersona, new HandshakeData
+            {
+                playerName = myPersona,
+                version = CoopNetworkManager.MOD_VERSION
+            });
+
+            SendP2PToHost(helloPacket);
+
+            string hostName = SteamFriends.GetFriendPersonaName(hostSteamId);
+            if (string.IsNullOrEmpty(hostName)) hostName = $"Host ({hostSteamId.m_SteamID})";
+
+            CoopNetworkManager.Instance.PrintToLocalConsole($"[COOP] Connecting to {hostName}'s Bridge via Steam P2P...", ConsoleMessageType.SpecialInfo);
+
+            MenuPanelUI.Instance.Clear();
+            MenuPanelUI.Instance.Reset();
+            new CoopConnectingScreen(hostName, hostSteamId);
         }
 
         private void Update()
@@ -320,6 +362,41 @@ namespace DuskersCoopMod.Network
                 _steamClients.Clear();
                 HostSteamId = CSteamID.Nil;
             }
+        }
+
+        public struct SteamFriendBridgeInfo
+        {
+            public CSteamID SteamId;
+            public string Name;
+            public CSteamID LobbyId;
+        }
+
+        public List<SteamFriendBridgeInfo> GetFriendsPlayingDuskers()
+        {
+            var list = new List<SteamFriendBridgeInfo>();
+            if (!IsSteamActive) return list;
+
+            int count = SteamFriends.GetFriendCount(EFriendFlags.k_EFriendFlagImmediate);
+            AppId_t myAppId = SteamUtils.GetAppID();
+
+            for (int i = 0; i < count; i++)
+            {
+                CSteamID friendId = SteamFriends.GetFriendByIndex(i, EFriendFlags.k_EFriendFlagImmediate);
+                FriendGameInfo_t gameInfo;
+                if (SteamFriends.GetFriendGamePlayed(friendId, out gameInfo))
+                {
+                    if (gameInfo.m_gameID.AppID() == myAppId)
+                    {
+                        list.Add(new SteamFriendBridgeInfo
+                        {
+                            SteamId = friendId,
+                            Name = SteamFriends.GetFriendPersonaName(friendId),
+                            LobbyId = gameInfo.m_steamIDLobby
+                        });
+                    }
+                }
+            }
+            return list;
         }
     }
 }

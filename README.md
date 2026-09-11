@@ -83,6 +83,26 @@ Inicie o Duskers normalmente pela Steam. No Menu Principal, você verá as opç�
 
 ---
 
+## 🟢 Como Jogar Usando GreenLuma
+
+O mod possui suporte nativo ao **GreenLuma**:
+
+1. **Configuração no GreenLuma:**
+   * Adicione o AppID do Duskers (**`254320`**) na sua pasta `AppList` do GreenLuma (ex: arquivo `254320.txt`).
+   * O mod já inclui automaticamente o arquivo `steam_appid.txt` com `254320` na pasta raiz do Duskers.
+
+2. **Se você for o HOST:**
+   * Inicie o Duskers, vá em **`[M]` (Multiplayer)** e depois **`[H]` (Host Session)**.
+   * O mod cria automaticamente um lobby público Steam e inicia o servidor local simultaneamente (Dual-Stack).
+   * Pressione **`[C]` (Copy Bridge Steam ID)** para copiar seu Steam ID (ex: `76561198...`) e envie para seu amigo no Discord. Se preferir, pode convidar pelo Shift+Tab (**`[I]`**).
+
+3. **Se você for o CONVIDADO:**
+   * **Opção 1 (1-Clique pela Lista):** Vá em **`[M]`** e aperte **`[J]` (Join Session)**. Se o Host estiver no Duskers, o nome dele aparecerá na lista `--- STEAM FRIENDS PLAYING DUSKERS ---`. Basta apertar o número indicado (ex: **`[1]`**) para conectar direto!
+   * **Opção 2 (Via Steam ID copiado):** Copie o Steam ID que o Host enviou, abra o jogo, vá em **`[J]oin Session`** e pressione **`[P]` (Fast Join from Clipboard)**. O mod detecta o Steam ID e conecta via Steam P2P com a tela de loading CRT!
+   * **Opção 3 (Radmin VPN / LAN):** Se houver qualquer instabilidade na Steam, ambos podem usar Radmin VPN e conectar via **`[I] Join with Direct IP + Port`**.
+
+---
+
 ## ⌨️ Comandos do Console In-Game (Terminal CRT)
 
 Você pode interagir e testar a conexão a qualquer momento durante a missão digitando no próprio terminal:

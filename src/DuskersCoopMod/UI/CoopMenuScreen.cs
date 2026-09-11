@@ -70,6 +70,21 @@ namespace DuskersCoopMod.UI
                     SteamCoopManager.Instance?.OpenInviteOverlay();
                 }, num++));
 
+                if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamActive)
+                {
+                    ulong steamId = Steamworks.SteamUser.GetSteamID().m_SteamID;
+                    MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[C]opy Bridge Steam ID (GreenLuma)", KeyCode.C, (m) =>
+                    {
+                        GUIUtility.systemCopyBuffer = steamId.ToString();
+                        DialogUI.Instance.ShowDialog(
+                            "Steam Bridge ID Copied",
+                            $"Your Steam ID has been copied to clipboard:\r\n\r\n{steamId}\r\n\r\nYour friend can use [J]oin Session -> [P] Fast Join from Clipboard to connect directly via Steam P2P!",
+                            ModalWindowType.OK,
+                            null
+                        );
+                    }, num++));
+                }
+
                 var slotDisplay = new DuskersMenuItem($"Active Save: Slot {SaveSlotManager.CurrentSlot}", KeyCode.None, null, num++);
                 slotDisplay.Disabled = true;
                 MenuPanelUI.Instance.AddMenuItem(slotDisplay);
@@ -217,14 +232,7 @@ namespace DuskersCoopMod.UI
 
         private void OnJoinSelected(DuskersMenuItem item)
         {
-            if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamActive)
-            {
-                SteamCoopManager.Instance.OpenInviteOverlay();
-            }
-            else
-            {
-                new JoinChoiceMenuScreen();
-            }
+            new JoinChoiceMenuScreen();
         }
     }
 }

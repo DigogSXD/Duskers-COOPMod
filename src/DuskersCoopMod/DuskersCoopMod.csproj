@@ -43,5 +43,6 @@
 
   <Target Name="DeployToGame" AfterTargets="Build">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins" ContinueOnError="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\steam_appid.txt" DestinationFolder="$(GameDir)" ContinueOnError="true" />
   </Target>
 </Project>
