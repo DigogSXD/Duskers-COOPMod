@@ -109,6 +109,7 @@ namespace DuskersCoopMod.Save
             // If client is still in MainMenu / CoopMenuScreen, launch directly into Host's space!
             if (GalaxyMapManager.Instance == null)
             {
+                GalaxyProcessor.universeMapManager = null;
                 GalaxyMapManager.PreserveData = true;
                 if (MainMenu.Instance != null)
                 {
@@ -128,6 +129,21 @@ namespace DuskersCoopMod.Save
             // Client is currently in GalaxyMapManager (space)
             var gmm = GalaxyMapManager.Instance;
             var tr = Traverse.Create(gmm);
+
+            // Check if client is currently in a different galaxy than the Host
+            int currentGalaxyId = UniverseMapManager.Instance != null && UniverseMapManager.Instance.CurrentUniverseNode != null 
+                ? UniverseMapManager.Instance.CurrentUniverseNode.InternalID 
+                : 0;
+
+            if (state.galaxyInternalId != 0 && currentGalaxyId != state.galaxyInternalId)
+            {
+                Debug.Log($"[DuskersCoopMod] Client galaxy ({currentGalaxyId}) differs from Host ({state.galaxyInternalId}). Reloading UniverseSceneProcessor to align galaxy!");
+                GalaxyProcessor.universeMapManager = null;
+                GalaxyMapManager.PreserveData = true;
+                UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
+                return;
+            }
+
             Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
             try
             {
@@ -187,17 +203,10 @@ namespace DuskersCoopMod.Save
                     }
                 }
 
-                // Sync view state (Star system view vs Galaxy view)
-                if (state.mapState == (int)GalaxyMapState.Dungeons && gmm.CurrentMapState != GalaxyMapState.Dungeons)
+                // Sync view state (SET VIEW: 1 = Universe, 2 = Galaxy, 3 = System)
+                if (state.mapState >= 1 && state.mapState <= 3 && (int)gmm.CurrentMapState != state.mapState)
                 {
-                    if (player != null && player.CurrentStarSystem != null)
-                    {
-                        tr.Method("ShowStarSystemView", new object[] { player.CurrentStarSystem, false, true })?.GetValue();
-                    }
-                }
-                else if (state.mapState == (int)GalaxyMapState.StarSystems && gmm.CurrentMapState == GalaxyMapState.Dungeons)
-                {
-                    tr.Method("HideStarSystemView")?.GetValue();
+                    tr.Method("SetMapState", new object[] { (GalaxyMapState)state.mapState, true, true })?.GetValue();
                 }
 
                 tr.Method("UpdateGUIVariables")?.GetValue();

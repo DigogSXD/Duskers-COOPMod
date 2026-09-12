@@ -814,22 +814,82 @@ namespace DuskersCoopMod.Network
                     }
                     break;
 
-                case "BOARD_DUNGEON":
-                    if (GalaxyMapManager.Instance != null)
+                case "SET_MAP_STATE":
+                    if (GalaxyMapManager.Instance != null && int.TryParse(data.targetName, out int targetMapState))
                     {
                         try
                         {
                             Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
-                            HarmonyLib.Traverse.Create(GalaxyMapManager.Instance).Method("BoardCurrentDungeon")?.GetValue();
+                            HarmonyLib.Traverse.Create(GalaxyMapManager.Instance).Method("SetMapState", new object[] { (GalaxyMapState)targetMapState, true, true })?.GetValue();
                         }
                         catch (Exception ex)
                         {
-                            Debug.LogError($"[DuskersCoopMod] Error handling remote BOARD_DUNGEON: {ex}");
+                            Debug.LogError($"[DuskersCoopMod] Error handling remote SET_MAP_STATE: {ex}");
                         }
                         finally
                         {
                             Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
                         }
+                    }
+                    break;
+
+                case "BOARD_DUNGEON":
+                    try
+                    {
+                        Patches.GalaxyMapPatches.IsApplyingRemoteAction = true;
+
+                        if (GalaxyMapManager.Instance != null)
+                        {
+                            var gmm = GalaxyMapManager.Instance;
+                            var tr = HarmonyLib.Traverse.Create(gmm);
+                            var selDung = tr.Property("SelectedDungeon").GetValue<DungeonInfo>();
+
+                            if (selDung == null && !string.IsNullOrEmpty(data.targetName))
+                            {
+                                var curSys = GlobalSettings.GameState != null && GlobalSettings.GameState.ThePlayer != null 
+                                    ? GlobalSettings.GameState.ThePlayer.CurrentStarSystem 
+                                    : null;
+                                if (curSys != null && curSys.Dungeons != null)
+                                {
+                                    selDung = curSys.Dungeons.Find(d =>
+                                        (!string.IsNullOrEmpty(d.DisplayName) && d.DisplayName.Equals(data.targetName, StringComparison.OrdinalIgnoreCase)) ||
+                                        (!string.IsNullOrEmpty(d.Name) && d.Name.Equals(data.targetName, StringComparison.OrdinalIgnoreCase)) ||
+                                        d.Id.ToString() == data.targetName);
+                                }
+                            }
+
+                            if (selDung == null && GlobalSettings.GameState != null && GlobalSettings.GameState.ThePlayer != null)
+                            {
+                                selDung = GlobalSettings.GameState.ThePlayer.CurrentDockedDungeon;
+                            }
+
+                            if (selDung != null)
+                            {
+                                gmm.SetSelectedDungeon(selDung, false);
+                            }
+
+                            // If we now have a valid SelectedDungeon, invoke BoardCurrentDungeon
+                            if (tr.Property("SelectedDungeon").GetValue<DungeonInfo>() != null)
+                            {
+                                tr.Method("BoardCurrentDungeon")?.GetValue();
+                                return;
+                            }
+                        }
+
+                        // Fallback: load level directly so client operator is never stranded in space
+                        Debug.LogWarning("[DuskersCoopMod] BoardCurrentDungeon fallback: loading DungeonScene_Generated_Pro directly.");
+                        if (Mothership.Instance != null) Mothership.Instance.Stop();
+                        UnityEngine.Application.LoadLevel("DungeonScene_Generated_Pro");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[DuskersCoopMod] Error in BOARD_DUNGEON: {ex}. Loading dungeon scene directly.");
+                        if (Mothership.Instance != null) Mothership.Instance.Stop();
+                        UnityEngine.Application.LoadLevel("DungeonScene_Generated_Pro");
+                    }
+                    finally
+                    {
+                        Patches.GalaxyMapPatches.IsApplyingRemoteAction = false;
                     }
                     break;
             }

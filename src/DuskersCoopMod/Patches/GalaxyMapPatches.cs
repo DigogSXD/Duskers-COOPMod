@@ -241,7 +241,7 @@ namespace DuskersCoopMod.Patches
 
         [HarmonyPostfix]
         [HarmonyPatch("BoardCurrentDungeon")]
-        public static void BoardCurrentDungeon_Postfix()
+        public static void BoardCurrentDungeon_Postfix(GalaxyMapManager __instance)
         {
             if (IsApplyingRemoteAction) return;
             var net = CoopNetworkManager.Instance;
@@ -250,9 +250,35 @@ namespace DuskersCoopMod.Patches
                 // Sync latest save so derelict seed and fleet state match 100%
                 CoopSaveSyncManager.SyncToAllClients();
 
+                var selDung = Traverse.Create(__instance).Property("SelectedDungeon").GetValue<DungeonInfo>()
+                    ?? GlobalSettings.GameState?.ThePlayer?.CurrentDockedDungeon;
+
+                string dungName = "";
+                if (selDung != null)
+                {
+                    dungName = !string.IsNullOrEmpty(selDung.DisplayName) ? selDung.DisplayName : selDung.Name;
+                }
+
                 net.BroadcastPacket(PacketWrapper.Create("STRATEGIC_ACTION", "Host", new StrategicActionData
                 {
-                    action = "BOARD_DUNGEON"
+                    action = "BOARD_DUNGEON",
+                    targetName = dungName
+                }));
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch("SetMapState", new Type[] { typeof(GalaxyMapState), typeof(bool), typeof(bool) })]
+        public static void SetMapState_Postfix(GalaxyMapState state, bool force, bool ignoreSound)
+        {
+            if (IsApplyingRemoteAction) return;
+            var net = CoopNetworkManager.Instance;
+            if (net != null && net.Role == NetworkRole.Host && net.ConnectedCount > 0)
+            {
+                net.BroadcastPacket(PacketWrapper.Create("STRATEGIC_ACTION", "Host", new StrategicActionData
+                {
+                    action = "SET_MAP_STATE",
+                    targetName = ((int)state).ToString()
                 }));
             }
         }

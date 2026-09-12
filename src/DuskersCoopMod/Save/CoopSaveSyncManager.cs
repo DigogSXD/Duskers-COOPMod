@@ -128,19 +128,16 @@ namespace DuskersCoopMod.Save
                     Debug.LogWarning($"[DuskersCoopMod] Non-critical error initializing GalaxySaveFile: {ex.Message}");
                 }
 
-                // If GalaxyMapManager is currently active, refresh GUI and player data!
+                // Clear cached universeMapManager so Duskers parses the synced universe and galaxies from disk
+                GalaxyProcessor.universeMapManager = null;
+                GalaxyMapManager.PreserveData = true;
+
+                // If GalaxyMapManager is currently active, reload UniverseSceneProcessor so that all 3D constellation nodes,
+                // galaxy nodes, and star systems regenerate 100% identically to the Host's universe!
                 if (GalaxyMapManager.Instance != null)
                 {
-                    try
-                    {
-                        var tr = HarmonyLib.Traverse.Create(GalaxyMapManager.Instance);
-                        tr.Method("PlayerReset")?.GetValue();
-                        tr.Method("UpdateGUIVariables")?.GetValue();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogWarning($"[DuskersCoopMod] Non-critical error refreshing GalaxyMapManager after save sync: {ex.Message}");
-                    }
+                    Debug.Log("[DuskersCoopMod] Reloading UniverseSceneProcessor to instantiate Host's universe and galaxies!");
+                    UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
                 }
 
                 Debug.Log("[DuskersCoopMod] Successfully applied Host's synchronized save to SlotCoop!");

@@ -12,6 +12,28 @@ namespace DuskersCoopMod.Patches
         private static int _lastTargetPort = CoopNetworkManager.DEFAULT_PORT;
 
         [HarmonyPrefix]
+        [HarmonyPatch("CheckForBackspaceOrDelete")]
+        public static void CheckForBackspaceOrDelete_Prefix(ConsoleWindow3 __instance)
+        {
+            try
+            {
+                var tr = Traverse.Create(__instance);
+                string cmd = tr.Field("_commandText").GetValue<string>();
+                int pos = tr.Field("_cursorPosition").GetValue<int>();
+                int len = cmd != null ? cmd.Length : 0;
+                if (pos > len)
+                {
+                    tr.Field("_cursorPosition").SetValue(len);
+                }
+                else if (pos < 0)
+                {
+                    tr.Field("_cursorPosition").SetValue(0);
+                }
+            }
+            catch { }
+        }
+
+        [HarmonyPrefix]
         [HarmonyPatch("AttemptExecuteCommand")]
         public static bool AttemptExecuteCommand_Prefix(ConsoleWindow3 __instance)
         {
