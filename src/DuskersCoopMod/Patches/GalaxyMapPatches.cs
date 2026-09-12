@@ -99,10 +99,10 @@ namespace DuskersCoopMod.Patches
 
         [HarmonyPostfix]
         [HarmonyPatch("ConfirmJump", new Type[] { typeof(ModalWindowResult), typeof(string) })]
-        public static void ConfirmJump_Postfix(ModalWindowResult r, string destination)
+        public static void ConfirmJump_Postfix(ModalWindowResult result, string input)
         {
             if (IsApplyingRemoteAction) return;
-            if (r != ModalWindowResult.Yes) return;
+            if (result != ModalWindowResult.Yes) return;
 
             var net = CoopNetworkManager.Instance;
             if (net != null && net.Role == NetworkRole.Host && net.ConnectedCount > 0)
@@ -111,7 +111,7 @@ namespace DuskersCoopMod.Patches
                 net.BroadcastPacket(PacketWrapper.Create("STRATEGIC_ACTION", "Host", new StrategicActionData
                 {
                     action = "JUMP",
-                    targetName = destination
+                    targetName = input
                 }));
             }
         }

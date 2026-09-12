@@ -11,7 +11,7 @@ namespace DuskersCoopMod
     {
         public const string PLUGIN_GUID = "com.diogo.duskerscoop";
         public const string PLUGIN_NAME = "Duskers Coop Mod";
-        public const string PLUGIN_VERSION = "1.0.0";
+        public const string PLUGIN_VERSION = "1.1.0";
 
         public static ConfigEntry<int> ConfigPort;
 
