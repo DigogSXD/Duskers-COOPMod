@@ -107,6 +107,27 @@ namespace DuskersCoopMod.Save
                 GameSaveFile.ReInitSetting();
                 UniverseSaveFile.ReInitSetting();
 
+                try
+                {
+                    // Ensure tutorial prompt does not block launching or galaxy initialization
+                    GameSaveFile.Save<bool>("WS_NEVRVWD_TUT", false);
+                    GameSaveFile.Save<bool>("VIEWED_TUT", true);
+
+                    int curGlxy = UniverseSaveFile.Get<int>("CUR_GLXY", 0);
+                    if (curGlxy != 0)
+                    {
+                        GalaxySaveFile.InitSetting(curGlxy);
+                    }
+                    else
+                    {
+                        GalaxySaveFile.ReInitSetting();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[DuskersCoopMod] Non-critical error initializing GalaxySaveFile: {ex.Message}");
+                }
+
                 // If GalaxyMapManager is currently active, refresh GUI and player data!
                 if (GalaxyMapManager.Instance != null)
                 {

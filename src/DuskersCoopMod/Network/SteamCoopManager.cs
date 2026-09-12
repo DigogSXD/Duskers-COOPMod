@@ -280,6 +280,8 @@ namespace DuskersCoopMod.Network
                         SendP2PTo(senderId, savePacket);
                     }
 
+                    DuskersCoopMod.Save.CoopGalaxySyncManager.BroadcastGalaxyState();
+
                     BroadcastP2P(PacketWrapper.Create("SYSTEM_LOG", "Host", $"[COOP] {op.Name} joined the command bridge!"), senderId);
                 }
 

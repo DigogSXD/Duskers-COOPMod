@@ -85,4 +85,18 @@ namespace DuskersCoopMod.Network
         public string action;
         public string targetName;
     }
+
+    [Serializable]
+    public class GalaxyStateData
+    {
+        public int galaxyInternalId;
+        public string galaxyName;
+        public int starSystemId;
+        public string starSystemName;
+        public string dockedDungeonName;
+        public int scrap;
+        public int propulsionFuel;
+        public int jumpFuel;
+        public int mapState;
+    }
 }

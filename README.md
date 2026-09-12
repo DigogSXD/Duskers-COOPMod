@@ -1,6 +1,8 @@
 # 🛰️ Duskers CO-OP Mod
 
-[![Release](https://img.shields.io/badge/Release-v1.1.0-green.svg)](https://github.com/DigogSXD/Duskers-COOPMod/releases)
+[![Download Mod](https://img.shields.io/badge/Download%20Mod-v1.1.0%20(Clique%20para%20Baixar)-brightgreen?style=for-the-badge&logo=github)](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.0.zip)
+
+[![Release](https://img.shields.io/badge/Release-v1.1.0-green.svg)](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.0.zip)
 [![Game Version](https://img.shields.io/badge/Duskers-v1.205%2B-blue.svg)](https://store.steampowered.com/app/254320/Duskers/)
 [![Framework](https://img.shields.io/badge/BepInEx-5.4.21.0%20(x86)-orange.svg)](https://github.com/BepInEx/BepInEx/releases)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)

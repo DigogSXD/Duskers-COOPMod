@@ -444,6 +444,8 @@ namespace DuskersCoopMod.Network
                         }));
                     }
 
+                    DuskersCoopMod.Save.CoopGalaxySyncManager.BroadcastGalaxyState();
+
                     // Broadcast to other operators
                     BroadcastPacket(PacketWrapper.Create("SYSTEM_LOG", "Host", $"[COOP] {client.Name} joined the command bridge!"), client);
 
@@ -640,6 +642,17 @@ namespace DuskersCoopMod.Network
                         }
                     }
                     break;
+
+                case "GALAXY_STATE":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var stateData = packet.GetData<GalaxyStateData>();
+                        if (stateData != null)
+                        {
+                            DuskersCoopMod.Save.CoopGalaxySyncManager.ApplyGalaxyState(stateData);
+                        }
+                    }
+                    break;
             }
         }
 
@@ -654,8 +667,8 @@ namespace DuskersCoopMod.Network
                     {
                         try
                         {
-                            var playMethod = HarmonyLib.AccessTools.Method(typeof(MainMenu), "MenuPlayGame", new Type[] { typeof(DuskersMenuItem) });
-                            playMethod?.Invoke(MainMenu.Instance, new object[] { null });
+                            GalaxyMapManager.PreserveData = true;
+                            MainMenu.LaunchGameFinal();
                         }
                         catch (Exception ex)
                         {
@@ -682,8 +695,8 @@ namespace DuskersCoopMod.Network
                                     d.InternalId.ToString() == data.targetName);
                                 if (target != null)
                                 {
-                                    tr.Property("SelectedDungeon").SetValue(target);
-                                    tr.Method("TravelToDungeon", new object[] { true })?.GetValue();
+                                    DuskersCoopMod.Save.CoopGalaxySyncManager.SetShipDungeon(GalaxyMapManager.Instance, target, false);
+                                    tr.Method("UpdateGUIVariables")?.GetValue();
                                 }
                             }
                         }
@@ -713,12 +726,12 @@ namespace DuskersCoopMod.Network
                                     var info = HarmonyLib.Traverse.Create(node).Property("Info").GetValue<StarSystemInfo>();
                                     if (info != null && (string.Equals(info.Name, data.targetName, StringComparison.OrdinalIgnoreCase) || info.Id.ToString() == data.targetName))
                                     {
-                                        tr.Method("SetSelectedStarSystem", new object[] { info, false })?.GetValue();
+                                        DuskersCoopMod.Save.CoopGalaxySyncManager.SetShipStarSystem(GalaxyMapManager.Instance, info, false);
+                                        tr.Method("UpdateGUIVariables")?.GetValue();
                                         break;
                                     }
                                 }
                             }
-                            tr.Method("TravelToStarSystem")?.GetValue();
                         }
                         catch (Exception ex)
                         {
