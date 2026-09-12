@@ -12,17 +12,119 @@ namespace DuskersCoopMod.Patches
     {
         [HarmonyPrefix]
         [HarmonyPatch(typeof(UniverseMapManager), "ChooseStartingGalaxy")]
-        public static void ChooseStartingGalaxy_Prefix(UniverseMapManager __instance)
+        public static bool ChooseStartingGalaxy_Prefix(UniverseMapManager __instance)
         {
-            var net = CoopNetworkManager.Instance;
-            if (net != null && net.Role == NetworkRole.Client && CoopGalaxySyncManager.HasTargetGalaxyState)
+            // Always zero DestinationGalaxyOverride.
+            // Duskers has an unhandled native bug in ChooseStartingGalaxy: if DestinationGalaxyOverride != 0 and the ID is not
+            // found in placedNodes, it logs an error and dereferences a null UniverseNode, causing a fatal crash.
+            try
             {
-                if (CoopGalaxySyncManager.TargetGalaxyId != 0)
+                Traverse.Create(__instance).Property("DestinationGalaxyOverride")?.SetValue(0);
+                Traverse.Create(__instance).Field("<DestinationGalaxyOverride>k__BackingField")?.SetValue(0);
+            }
+            catch {}
+
+            var net = CoopNetworkManager.Instance;
+            if (net != null && net.Role == NetworkRole.Client)
+            {
+                try
                 {
-                    Traverse.Create(__instance).Property("DestinationGalaxyOverride")?.SetValue(CoopGalaxySyncManager.TargetGalaxyId);
-                    Traverse.Create(__instance).Field("<DestinationGalaxyOverride>k__BackingField")?.SetValue(CoopGalaxySyncManager.TargetGalaxyId);
-                    GalaxyMapManager.PreserveData = true;
-                    Debug.Log($"[DuskersCoopMod] Overriding starting galaxy to match Host Galaxy ID: {CoopGalaxySyncManager.TargetGalaxyId}");
+                    var tr = Traverse.Create(__instance);
+                    var placedNodes = tr.Field("placedNodes").GetValue<System.Collections.Generic.List<UniverseNode>>();
+                    if (placedNodes != null && placedNodes.Count > 0)
+                    {
+                        UniverseNode targetNode = null;
+                        if (CoopGalaxySyncManager.HasTargetGalaxyState && CoopGalaxySyncManager.TargetGalaxyId != 0)
+                        {
+                            targetNode = placedNodes.Find(n => n != null && n.InternalID == CoopGalaxySyncManager.TargetGalaxyId);
+                        }
+
+                        if (targetNode == null)
+                        {
+                            int curGlxy = 0;
+                            try { curGlxy = UniverseSaveFile.Get<int>("CUR_GLXY", 0); } catch {}
+                            if (curGlxy != 0)
+                            {
+                                targetNode = placedNodes.Find(n => n != null && n.InternalID == curGlxy);
+                            }
+                        }
+
+                        if (targetNode == null)
+                        {
+                            targetNode = placedNodes[0];
+                        }
+
+                        if (targetNode != null)
+                        {
+                            if (__instance.CurrentUniverseNode != null)
+                            {
+                                __instance.CurrentUniverseNode.IsSelected = false;
+                            }
+
+                            if (!__instance.IsReadOnlyGalaxy)
+                            {
+                                try
+                                {
+                                    UniverseSaveFile.Add("GHOP", targetNode.GroupKey);
+                                    UniverseSaveFile.Save<string>(targetNode.GroupKey, "FILE", string.Format("gd_{0}", targetNode.InternalID));
+                                    UniverseSaveFile.Save<int>("CUR_GLXY", targetNode.InternalID);
+                                }
+                                catch {}
+                            }
+
+                            targetNode.IsSelected = true;
+                            tr.Property("CurrentUniverseNode").SetValue(targetNode);
+
+                            if (targetNode.constellation != null)
+                            {
+                                tr.Method("UpdateConstelationDataStates")?.GetValue();
+                            }
+
+                            GalaxySaveFile.InitSetting(targetNode.InternalID);
+                            string mapChoosen = tr.Method("AssignGalaxyMapToNode", new object[] { targetNode })?.GetValue<string>();
+                            if (!string.IsNullOrEmpty(mapChoosen))
+                            {
+                                GameSaveFile.Save<string>("GALAXY_ID", mapChoosen);
+                            }
+
+                            Debug.Log($"[DuskersCoopMod] [Client] ChooseStartingGalaxy successfully selected node {targetNode.InternalID} ({targetNode.name})");
+                            return false; // Safely bypass native ChooseStartingGalaxy!
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[DuskersCoopMod] Error in custom ChooseStartingGalaxy for client: {ex}");
+                }
+            }
+
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(UniverseMapManager), "ChooseStartingGalaxy")]
+        public static void ChooseStartingGalaxy_Postfix(UniverseMapManager __instance)
+        {
+            if (__instance == null) return;
+            if (__instance.CurrentUniverseNode == null)
+            {
+                try
+                {
+                    var tr = Traverse.Create(__instance);
+                    var placedNodes = tr.Field("placedNodes").GetValue<System.Collections.Generic.List<UniverseNode>>();
+                    if (placedNodes != null && placedNodes.Count > 0)
+                    {
+                        var node = placedNodes[0];
+                        node.IsSelected = true;
+                        tr.Property("CurrentUniverseNode").SetValue(node);
+                        GalaxySaveFile.InitSetting(node.InternalID);
+                        tr.Method("AssignGalaxyMapToNode", new object[] { node })?.GetValue();
+                        Debug.LogWarning($"[DuskersCoopMod] ChooseStartingGalaxy had null CurrentUniverseNode, safely fell back to node {node.InternalID}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[DuskersCoopMod] Error in ChooseStartingGalaxy_Postfix fallback: {ex}");
                 }
             }
         }
