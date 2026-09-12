@@ -130,6 +130,60 @@ namespace DuskersCoopMod.Patches
         }
     }
 
+    [HarmonyPatch]
+    public static class GalaxyProcessorPatches
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GalaxyProcessor), "GenerateDungeonInfo", new Type[] { typeof(StarSystemInfo), typeof(bool), typeof(GalaxyProcessor.DungeonProcessorCB) })]
+        public static void GenerateDungeonInfo_Postfix(StarSystemInfo starSystem)
+        {
+            if (starSystem == null) return;
+            try
+            {
+                if (starSystem.Dungeons == null)
+                {
+                    starSystem.Dungeons = new System.Collections.Generic.List<DungeonInfo>();
+                }
+
+                if (starSystem.Dungeons.Count == 0)
+                {
+                    int seed = UnityEngine.Random.Range(10000, 999999);
+                    var d = GalaxyProcessor.BuildNormalDungeon(1, DungeonTypeEnum.Derelict, starSystem, seed, 1);
+                    if (d != null)
+                    {
+                        d.Parent = starSystem;
+                        d.HaveVisited = false;
+                        starSystem.Dungeons.Add(d);
+                        Debug.LogWarning($"[DuskersCoopMod] Injected fallback derelict into empty system {starSystem.Name} (seed: {seed})");
+                    }
+                }
+
+                if (starSystem.Dungeons.Count > 0)
+                {
+                    if (!starSystem.Dungeons.Exists(d => d != null && !d.HaveVisited))
+                    {
+                        starSystem.Dungeons[0].HaveVisited = false;
+                        if (!string.IsNullOrEmpty(starSystem.Dungeons[0].GroupKey))
+                        {
+                            GalaxySaveFile.Save<bool>(starSystem.Dungeons[0].GroupKey, "VISITED", false);
+                        }
+                    }
+
+                    var target = starSystem.Dungeons.Find(d => d != null && !d.HaveVisited) ?? starSystem.Dungeons[0];
+                    if (target != null && !string.IsNullOrEmpty(target.GroupKey))
+                    {
+                        GalaxySaveFile.Save<string>(starSystem.GroupKey, "LAST_DOCKED_ID", target.GroupKey);
+                        GalaxySaveFile.Save<string>(starSystem.GroupKey, "LAST_SELECTED_ID", target.GroupKey);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DuskersCoopMod] Error in GenerateDungeonInfo_Postfix: {ex}");
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(GalaxyMapManager))]
     public static class GalaxyMapPatches
     {
@@ -210,37 +264,41 @@ namespace DuskersCoopMod.Patches
                 {
                     var curSys = player.CurrentStarSystem;
                     var tr = Traverse.Create(__instance);
-                    var nodes = tr.Field("_starSystemNodes").GetValue<System.Collections.IList>();
 
-                    // If current star system has no dungeons, locate a star system in the galaxy that does
-                    if ((curSys == null || curSys.Dungeons == null || curSys.Dungeons.Count == 0) && nodes != null)
+                    if (curSys == null)
                     {
-                        foreach (object node in nodes)
+                        var nodes = tr.Field("_starSystemNodes").GetValue<System.Collections.IList>();
+                        if (nodes != null && nodes.Count > 0)
                         {
-                            var info = Traverse.Create(node).Property("Info").GetValue<StarSystemInfo>();
-                            if (info != null && info.Dungeons != null && info.Dungeons.Count > 0)
+                            var firstInfo = Traverse.Create(nodes[0]).Property("Info").GetValue<StarSystemInfo>();
+                            if (firstInfo != null)
                             {
-                                Debug.LogWarning($"[DuskersCoopMod] Switched star system from empty/null system to valid system with derelicts: {info.Name}");
-                                player.CurrentStarSystem = info;
-                                curSys = info;
-                                break;
+                                player.CurrentStarSystem = firstInfo;
+                                curSys = firstInfo;
                             }
                         }
                     }
 
-                    // If we have a system with dungeons, guarantee LAST_DOCKED_ID is valid so DoAwake never hits native Enumerable.First() crash
-                    if (curSys != null && curSys.Dungeons != null && curSys.Dungeons.Count > 0)
+                    if (curSys != null)
                     {
-                        string groupKey = curSys.GroupKey;
-                        string lastDocked = GalaxySaveFile.Get<string>(groupKey, "LAST_DOCKED_ID", string.Empty);
-                        if (string.IsNullOrEmpty(lastDocked) || !curSys.Dungeons.Exists(d => d != null && d.GroupKey == lastDocked))
+                        if (curSys.Dungeons == null || curSys.Dungeons.Count == 0)
                         {
-                            var targetDung = curSys.Dungeons.Find(d => d != null && !d.HaveVisited) ?? curSys.Dungeons[0];
-                            if (targetDung != null)
+                            GalaxyProcessor.GenerateDungeonInfo(curSys, true, null);
+                        }
+
+                        if (curSys.Dungeons != null && curSys.Dungeons.Count > 0)
+                        {
+                            string groupKey = curSys.GroupKey;
+                            string lastDocked = GalaxySaveFile.Get<string>(groupKey, "LAST_DOCKED_ID", string.Empty);
+                            if (string.IsNullOrEmpty(lastDocked) || !curSys.Dungeons.Exists(d => d != null && d.GroupKey == lastDocked))
                             {
-                                GalaxySaveFile.Save<string>(groupKey, "LAST_DOCKED_ID", targetDung.GroupKey);
-                                GalaxySaveFile.Save<string>(groupKey, "LAST_SELECTED_ID", targetDung.GroupKey);
-                                Debug.Log($"[DuskersCoopMod] Guaranteed LAST_DOCKED_ID={targetDung.GroupKey} for system {curSys.Name} to protect against native crash.");
+                                var targetDung = curSys.Dungeons.Find(d => d != null && !d.HaveVisited) ?? curSys.Dungeons[0];
+                                if (targetDung != null)
+                                {
+                                    GalaxySaveFile.Save<string>(groupKey, "LAST_DOCKED_ID", targetDung.GroupKey);
+                                    GalaxySaveFile.Save<string>(groupKey, "LAST_SELECTED_ID", targetDung.GroupKey);
+                                    Debug.Log($"[DuskersCoopMod] Guaranteed LAST_DOCKED_ID={targetDung.GroupKey} for system {curSys.Name} to protect against native crash.");
+                                }
                             }
                         }
                     }
@@ -262,14 +320,49 @@ namespace DuskersCoopMod.Patches
                 try
                 {
                     var p = GlobalSettings.GameState != null ? GlobalSettings.GameState.ThePlayer : null;
-                    if (p != null && p.CurrentStarSystem != null && p.CurrentStarSystem.Dungeons != null && p.CurrentStarSystem.Dungeons.Count > 0)
+                    if (p != null && p.CurrentStarSystem != null)
                     {
-                        var d = p.CurrentStarSystem.Dungeons[0];
-                        Traverse.Create(__instance).Method("SetPlayerShipDungeon", new object[] { d, true })?.GetValue();
+                        if (p.CurrentStarSystem.Dungeons == null || p.CurrentStarSystem.Dungeons.Count == 0)
+                        {
+                            GalaxyProcessorPatches.GenerateDungeonInfo_Postfix(p.CurrentStarSystem);
+                        }
+                        if (p.CurrentStarSystem.Dungeons != null && p.CurrentStarSystem.Dungeons.Count > 0)
+                        {
+                            var d = p.CurrentStarSystem.Dungeons[0];
+                            Traverse.Create(__instance).Method("SetPlayerShipDungeon", new object[] { d, true })?.GetValue();
+                            Traverse.Create(__instance).Property("SelectedDungeon")?.SetValue(d);
+                        }
                     }
                 }
                 catch {}
                 return null; // Suppresses exception to prevent CrashHandler.CrashAndQuit from closing the game!
+            }
+            return null;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch("SetSelectedDungeon", new Type[] { typeof(DungeonInfo), typeof(bool) })]
+        public static bool SetSelectedDungeon_Prefix(GalaxyMapManager __instance, ref DungeonInfo dungeon, bool playSound)
+        {
+            if (dungeon == null)
+            {
+                var curSys = GlobalSettings.GameState != null && GlobalSettings.GameState.ThePlayer != null ? GlobalSettings.GameState.ThePlayer.CurrentStarSystem : null;
+                if (curSys != null && curSys.Dungeons != null && curSys.Dungeons.Count > 0)
+                {
+                    dungeon = curSys.Dungeons[0];
+                }
+            }
+            return dungeon != null;
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch("DoUpdate")]
+        public static Exception DoUpdate_Finalizer(Exception __exception)
+        {
+            if (__exception != null)
+            {
+                // Suppress unhandled frame exceptions to prevent CrashHandler.CrashAndQuit from displaying fatal dialog
+                return null;
             }
             return null;
         }
