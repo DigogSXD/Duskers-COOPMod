@@ -663,17 +663,37 @@ namespace DuskersCoopMod.Network
             switch (data.action)
             {
                 case "LAUNCH_GAME":
-                    if (MainMenu.Instance != null)
+                    try
                     {
+                        GlobalSettings.IsTutorial = false;
+                        GlobalSettings.FirstTimeIn = true;
+                        GalaxyMapManager.PreserveData = true;
+
+                        if (MainMenu.Instance != null)
+                        {
+                            try
+                            {
+                                MainMenu.LaunchGameFinal();
+                                return;
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogWarning($"[DuskersCoopMod] MainMenu.LaunchGameFinal threw ({ex.Message}), falling back to direct scene load.");
+                            }
+                        }
+
+                        // Direct scene load fallback (guaranteed to launch regardless of UI menu stack state)
+                        UnityEngine.Resources.UnloadUnusedAssets();
+                        UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[DuskersCoopMod] Error auto-launching game on client: {ex}");
                         try
                         {
-                            GalaxyMapManager.PreserveData = true;
-                            MainMenu.LaunchGameFinal();
+                            UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
                         }
-                        catch (Exception ex)
-                        {
-                            Debug.LogError($"[DuskersCoopMod] Error auto-launching game on client: {ex}");
-                        }
+                        catch {}
                     }
                     break;
 

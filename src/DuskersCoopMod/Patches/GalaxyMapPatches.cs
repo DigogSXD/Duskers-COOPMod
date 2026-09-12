@@ -198,9 +198,80 @@ namespace DuskersCoopMod.Patches
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[DuskersCoopMod] Error in DetermineStartupStarSystem_Postfix: {ex}");
+                    Debug.LogError($"[DuskersCoopMod] Error in DetermineStartupStarSystem_Postfix (client alignment): {ex}");
                 }
             }
+
+            // Safe Startup Dungeon Guard (Protects BOTH Host and Client against native Duskers Enumerable.First() crash in DoAwake)
+            try
+            {
+                var player = GlobalSettings.GameState != null ? GlobalSettings.GameState.ThePlayer : null;
+                if (player != null)
+                {
+                    var curSys = player.CurrentStarSystem;
+                    var tr = Traverse.Create(__instance);
+                    var nodes = tr.Field("_starSystemNodes").GetValue<System.Collections.IList>();
+
+                    // If current star system has no dungeons, locate a star system in the galaxy that does
+                    if ((curSys == null || curSys.Dungeons == null || curSys.Dungeons.Count == 0) && nodes != null)
+                    {
+                        foreach (object node in nodes)
+                        {
+                            var info = Traverse.Create(node).Property("Info").GetValue<StarSystemInfo>();
+                            if (info != null && info.Dungeons != null && info.Dungeons.Count > 0)
+                            {
+                                Debug.LogWarning($"[DuskersCoopMod] Switched star system from empty/null system to valid system with derelicts: {info.Name}");
+                                player.CurrentStarSystem = info;
+                                curSys = info;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If we have a system with dungeons, guarantee LAST_DOCKED_ID is valid so DoAwake never hits native Enumerable.First() crash
+                    if (curSys != null && curSys.Dungeons != null && curSys.Dungeons.Count > 0)
+                    {
+                        string groupKey = curSys.GroupKey;
+                        string lastDocked = GalaxySaveFile.Get<string>(groupKey, "LAST_DOCKED_ID", string.Empty);
+                        if (string.IsNullOrEmpty(lastDocked) || !curSys.Dungeons.Exists(d => d != null && d.GroupKey == lastDocked))
+                        {
+                            var targetDung = curSys.Dungeons.Find(d => d != null && !d.HaveVisited) ?? curSys.Dungeons[0];
+                            if (targetDung != null)
+                            {
+                                GalaxySaveFile.Save<string>(groupKey, "LAST_DOCKED_ID", targetDung.GroupKey);
+                                GalaxySaveFile.Save<string>(groupKey, "LAST_SELECTED_ID", targetDung.GroupKey);
+                                Debug.Log($"[DuskersCoopMod] Guaranteed LAST_DOCKED_ID={targetDung.GroupKey} for system {curSys.Name} to protect against native crash.");
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DuskersCoopMod] Error in Safe Startup Dungeon Guard: {ex}");
+            }
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch("DoAwake")]
+        public static Exception DoAwake_Finalizer(Exception __exception, GalaxyMapManager __instance)
+        {
+            if (__exception != null)
+            {
+                Debug.LogError($"[DuskersCoopMod] Caught and suppressed fatal error in GalaxyMapManager.DoAwake: {__exception}");
+                try
+                {
+                    var p = GlobalSettings.GameState != null ? GlobalSettings.GameState.ThePlayer : null;
+                    if (p != null && p.CurrentStarSystem != null && p.CurrentStarSystem.Dungeons != null && p.CurrentStarSystem.Dungeons.Count > 0)
+                    {
+                        var d = p.CurrentStarSystem.Dungeons[0];
+                        Traverse.Create(__instance).Method("SetPlayerShipDungeon", new object[] { d, true })?.GetValue();
+                    }
+                }
+                catch {}
+                return null; // Suppresses exception to prevent CrashHandler.CrashAndQuit from closing the game!
+            }
+            return null;
         }
 
         [HarmonyPrefix]
