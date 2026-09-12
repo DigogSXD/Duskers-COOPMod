@@ -133,10 +133,14 @@ namespace DuskersCoopMod.Patches
     [HarmonyPatch(typeof(StarSystemInfo))]
     public static class StarSystemInfoPatches
     {
+        [ThreadStatic]
+        private static bool _isBuildingFallback = false;
+
         [HarmonyPostfix]
         [HarmonyPatch("get_Dungeons")]
         public static void get_Dungeons_Postfix(StarSystemInfo __instance, ref System.Collections.Generic.List<DungeonInfo> __result)
         {
+            if (_isBuildingFallback) return;
             if (__instance == null) return;
             if (__result == null)
             {
@@ -146,14 +150,26 @@ namespace DuskersCoopMod.Patches
 
             if (__result.Count == 0)
             {
-                int seed = UnityEngine.Random.Range(10000, 999999);
-                var d = GalaxyProcessor.BuildNormalDungeon(1, DungeonTypeEnum.Derelict, __instance, seed, 1);
-                if (d != null)
+                _isBuildingFallback = true;
+                try
                 {
-                    d.Parent = __instance;
-                    d.HaveVisited = false;
-                    __result.Add(d);
-                    Debug.LogWarning($"[DuskersCoopMod] Guaranteed fallback derelict in StarSystemInfo.Dungeons for {__instance.Name} (seed: {seed})");
+                    int seed = UnityEngine.Random.Range(10000, 999999);
+                    var d = GalaxyProcessor.BuildNormalDungeon(1, DungeonTypeEnum.Derelict, __instance, seed, 1);
+                    if (d != null)
+                    {
+                        d.Parent = __instance;
+                        d.HaveVisited = false;
+                        __result.Add(d);
+                        Debug.LogWarning($"[DuskersCoopMod] Guaranteed fallback derelict in StarSystemInfo.Dungeons for {__instance.Name} (seed: {seed})");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[DuskersCoopMod] Error creating fallback dungeon in get_Dungeons: {ex}");
+                }
+                finally
+                {
+                    _isBuildingFallback = false;
                 }
             }
         }
@@ -176,9 +192,14 @@ namespace DuskersCoopMod.Patches
             EnsureSystemHasDungeons(starSystemInfo);
         }
 
+        [ThreadStatic]
+        private static bool _isEnsuring = false;
+
         public static void EnsureSystemHasDungeons(StarSystemInfo starSystemInfo)
         {
+            if (_isEnsuring) return;
             if (starSystemInfo == null) return;
+            _isEnsuring = true;
             try
             {
                 if (starSystemInfo.Dungeons == null)
@@ -221,6 +242,10 @@ namespace DuskersCoopMod.Patches
             catch (Exception ex)
             {
                 Debug.LogError($"[DuskersCoopMod] Error in EnsureSystemHasDungeons: {ex}");
+            }
+            finally
+            {
+                _isEnsuring = false;
             }
         }
     }
