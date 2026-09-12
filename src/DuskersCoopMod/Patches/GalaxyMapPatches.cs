@@ -601,30 +601,36 @@ namespace DuskersCoopMod.Patches
 
         [HarmonyPrefix]
         [HarmonyPatch("BoardCurrentDungeon")]
-        public static bool BoardCurrentDungeon_Prefix()
+        public static bool BoardCurrentDungeon_Prefix(GalaxyMapManager __instance)
         {
-            if (IsApplyingRemoteAction) return true;
             var net = CoopNetworkManager.Instance;
-            if (net != null && net.Role == NetworkRole.Client)
+            if (!IsApplyingRemoteAction && net != null && net.Role == NetworkRole.Client)
             {
                 net.PrintToLocalConsole("[COOP] Derelict boarding is initiated by the Host operator.", ConsoleMessageType.Warning);
                 return false;
             }
-            return true;
+
+            try
+            {
+                PerformSafeBoarding(__instance);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DuskersCoopMod] Error in PerformSafeBoarding: {ex}");
+            }
+
+            return false;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch("BoardCurrentDungeon")]
-        public static void BoardCurrentDungeon_Postfix(GalaxyMapManager __instance)
+        public static void PerformSafeBoarding(GalaxyMapManager gmm)
         {
-            if (IsApplyingRemoteAction) return;
             var net = CoopNetworkManager.Instance;
-            if (net != null && net.Role == NetworkRole.Host && net.ConnectedCount > 0)
+            if (!IsApplyingRemoteAction && net != null && net.Role == NetworkRole.Host && net.ConnectedCount > 0)
             {
                 // Sync latest save so derelict seed and fleet state match 100%
                 CoopSaveSyncManager.SyncToAllClients();
 
-                var selDung = Traverse.Create(__instance).Property("SelectedDungeon").GetValue<DungeonInfo>()
+                var selDung = (gmm != null ? gmm.SelectedDungeon : null)
                     ?? GlobalSettings.GameState?.ThePlayer?.CurrentDockedDungeon;
 
                 string dungName = "";
@@ -641,6 +647,125 @@ namespace DuskersCoopMod.Patches
                     targetName = !string.IsNullOrEmpty(dungGroup) ? $"{dungName}|{dungGroup}" : dungName
                 }));
             }
+
+            // Safely clear event listeners
+            if (gmm != null && GlobalSettings.GameState?.StarSystems != null)
+            {
+                foreach (var sys in GlobalSettings.GameState.StarSystems)
+                {
+                    if (sys == null) continue;
+                    sys.OnStarSystemEvent = null;
+                    if (sys.Dungeons != null)
+                    {
+                        foreach (var d in sys.Dungeons)
+                        {
+                            if (d != null) d.OnDungeonEvent = null;
+                        }
+                    }
+                    if (sys.galaxyNode != null)
+                    {
+                        sys.galaxyNode.shortcutPressed = null;
+                        if (sys.galaxyNode.DungeonNodes != null)
+                        {
+                            foreach (var dn in sys.galaxyNode.DungeonNodes)
+                            {
+                                if (dn != null) dn.shortcutPressed = null;
+                            }
+                        }
+                    }
+                }
+            }
+
+            GlobalSettings.GameStartedFromGalaxyMap = true;
+            var player = GlobalSettings.GameState?.ThePlayer;
+            var dungeon = (gmm != null ? gmm.SelectedDungeon : null) ?? player?.CurrentDockedDungeon;
+
+            if (dungeon != null)
+            {
+                dungeon.HaveVisited = true;
+                if (dungeon.Parent != null && dungeon.Parent.IsNursery && GameSaveFile.Get<bool>("NC", false))
+                {
+                    try { Traverse.Create(gmm).Method("SyncNurseryDataBetweenDataFiles")?.GetValue(); } catch { }
+                }
+                UniverseSaveFile.Save<int>("STAT_VDUN", UniverseSaveFile.Get<int>("STAT_VDUN", 0) + 1);
+                if (!string.IsNullOrEmpty(dungeon.GroupKey))
+                {
+                    GalaxySaveFile.Save<bool>(dungeon.GroupKey, "VISITED", true);
+                }
+                if (dungeon.Parent != null)
+                {
+                    try { dungeon.Parent.Refresh(); } catch { }
+                }
+                if (player != null)
+                {
+                    player.CurrentDockedDungeon = dungeon;
+                    if (dungeon.Parent != null)
+                    {
+                        player.CurrentStarSystem = dungeon.Parent;
+                    }
+                }
+            }
+
+            var curSys = player?.CurrentStarSystem;
+            if (curSys != null && !string.IsNullOrEmpty(curSys.GroupKey))
+            {
+                if (!GalaxySaveFile.Get<bool>(curSys.GroupKey, "VISITED", false))
+                {
+                    UniverseSaveFile.Save<int>("STAT_VSYS", UniverseSaveFile.Get<int>("STAT_VSYS", 0) + 1);
+                    if (!GlobalSettings.IsTutorial)
+                    {
+                        GalaxySaveFile.Save<bool>(curSys.GroupKey, "VISITED", true);
+                    }
+                }
+            }
+
+            if (!GlobalSettings.IsTutorial)
+            {
+                GameSaveFile.Save<int>("MISSIONS", GameSaveFile.Get<int>("MISSIONS", 0) + 1);
+            }
+
+            var myShip = player?.MyShip;
+            if (myShip != null && myShip.InstalledInventory != null && myShip.InstalledInventory.ItemsCopy != null)
+            {
+                foreach (var item in myShip.InstalledInventory.ItemsCopy)
+                {
+                    if (item is BaseShipUpgrade up)
+                    {
+                        up.UsedMissionCount++;
+                    }
+                }
+            }
+
+            GlobalSettings.NumLogsAfterTutorial++;
+            GlobalSettings.cheatMode = false;
+            if (gmm != null)
+            {
+                Traverse.Create(gmm).Field("isLoadingScene").SetValue(true);
+                try
+                {
+                    int upgradesCount = Traverse.Create(gmm).Method("GetTotalShipUpgradesCount").GetValue<int>();
+                    Traverse.Create(typeof(GalaxyMapManager)).Field("_shipUpgradesCountPriorToMission").SetValue(upgradesCount);
+                }
+                catch { }
+            }
+            GalaxyMapManager.hasBoardedDungeon = true;
+            if (player?.Inventory != null)
+            {
+                Traverse.Create(typeof(GalaxyMapManager)).Field("scrapAtBoard").SetValue(player.Inventory.Scrap);
+            }
+            GameSaveFile.Save<bool>("MSG_DJ", true);
+
+            if (Mothership.Instance != null)
+            {
+                try { Mothership.Instance.Stop(); } catch { }
+            }
+
+            string scene = (dungeon != null && !string.IsNullOrEmpty(dungeon.SceneName))
+                ? dungeon.SceneName
+                : "DungeonScene_Generated_Pro";
+
+            Debug.Log($"[DuskersCoopMod] Boarding derelict '{(dungeon != null ? (!string.IsNullOrEmpty(dungeon.DisplayName) ? dungeon.DisplayName : dungeon.Name) : "Unknown")}' (Scene: {scene})...");
+            UnityEngine.Application.LoadLevel(scene);
         }
 
         [HarmonyPostfix]

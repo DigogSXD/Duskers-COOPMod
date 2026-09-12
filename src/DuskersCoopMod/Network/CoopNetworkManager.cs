@@ -873,67 +873,53 @@ namespace DuskersCoopMod.Network
                         DungeonInfo targetDungeon = null;
                         var player = GlobalSettings.GameState != null ? GlobalSettings.GameState.ThePlayer : null;
 
-                        if (player != null && player.CurrentStarSystem != null && player.CurrentStarSystem.Dungeons != null)
+                        // Search across all star systems to find matching derelict by GroupKey or Name
+                        if (GlobalSettings.GameState?.StarSystems != null)
                         {
-                            var dungs = player.CurrentStarSystem.Dungeons;
-
-                            if (!string.IsNullOrEmpty(targetGroup))
+                            foreach (var sys in GlobalSettings.GameState.StarSystems)
                             {
-                                targetDungeon = dungs.Find(d => d != null && string.Equals(d.GroupKey, targetGroup, StringComparison.OrdinalIgnoreCase));
+                                if (sys == null || sys.Dungeons == null) continue;
+                                if (!string.IsNullOrEmpty(targetGroup))
+                                {
+                                    targetDungeon = sys.Dungeons.Find(d => d != null && string.Equals(d.GroupKey, targetGroup, StringComparison.OrdinalIgnoreCase));
+                                    if (targetDungeon != null) break;
+                                }
+                                if (!string.IsNullOrEmpty(targetName))
+                                {
+                                    targetDungeon = sys.Dungeons.Find(d => d != null && (
+                                        (!string.IsNullOrEmpty(d.DisplayName) && string.Equals(d.DisplayName, targetName, StringComparison.OrdinalIgnoreCase)) ||
+                                        (!string.IsNullOrEmpty(d.Name) && string.Equals(d.Name, targetName, StringComparison.OrdinalIgnoreCase)) ||
+                                        d.Id.ToString() == targetName ||
+                                        d.InternalId.ToString() == targetName
+                                    ));
+                                    if (targetDungeon != null) break;
+                                }
                             }
+                        }
 
-                            if (targetDungeon == null && !string.IsNullOrEmpty(targetName))
+                        if (targetDungeon == null && player != null)
+                        {
+                            targetDungeon = player.CurrentDockedDungeon;
+                            if (targetDungeon == null && player.CurrentStarSystem?.Dungeons?.Count > 0)
                             {
-                                targetDungeon = dungs.Find(d => d != null && (
-                                    (!string.IsNullOrEmpty(d.DisplayName) && string.Equals(d.DisplayName, targetName, StringComparison.OrdinalIgnoreCase)) ||
-                                    (!string.IsNullOrEmpty(d.Name) && string.Equals(d.Name, targetName, StringComparison.OrdinalIgnoreCase)) ||
-                                    d.Id.ToString() == targetName ||
-                                    d.InternalId.ToString() == targetName
-                                ));
-                            }
-
-                            if (targetDungeon == null)
-                            {
-                                targetDungeon = player.CurrentDockedDungeon;
-                            }
-
-                            if (targetDungeon == null && dungs.Count > 0)
-                            {
-                                targetDungeon = dungs[0];
+                                targetDungeon = player.CurrentStarSystem.Dungeons[0];
                             }
                         }
 
                         if (targetDungeon != null && player != null)
                         {
-                            if (targetDungeon.Parent == null && player.CurrentStarSystem != null)
+                            if (targetDungeon.Parent != null)
                             {
-                                targetDungeon.Parent = player.CurrentStarSystem;
+                                player.CurrentStarSystem = targetDungeon.Parent;
                             }
                             player.CurrentDockedDungeon = targetDungeon;
                             if (GalaxyMapManager.Instance != null)
                             {
                                 GalaxyMapManager.Instance.SetSelectedDungeon(targetDungeon, false);
-                                DuskersCoopMod.Save.CoopGalaxySyncManager.SetShipDungeon(GalaxyMapManager.Instance, targetDungeon, false);
                             }
                         }
 
-                        if (GalaxyMapManager.Instance != null)
-                        {
-                            var tr = HarmonyLib.Traverse.Create(GalaxyMapManager.Instance);
-                            if (tr.Property("SelectedDungeon").GetValue<DungeonInfo>() != null)
-                            {
-                                tr.Method("BoardCurrentDungeon")?.GetValue();
-                                return;
-                            }
-                        }
-
-                        // Direct fallback: load level directly so client operator is never stranded in space
-                        Debug.LogWarning("[DuskersCoopMod] BoardCurrentDungeon fallback: loading target dungeon scene directly.");
-                        if (Mothership.Instance != null) Mothership.Instance.Stop();
-                        string sceneToLoad = targetDungeon != null && !string.IsNullOrEmpty(targetDungeon.SceneName)
-                            ? targetDungeon.SceneName
-                            : "DungeonScene_Generated_Pro";
-                        UnityEngine.Application.LoadLevel(sceneToLoad);
+                        Patches.GalaxyMapPatches.PerformSafeBoarding(GalaxyMapManager.Instance);
                     }
                     catch (Exception ex)
                     {

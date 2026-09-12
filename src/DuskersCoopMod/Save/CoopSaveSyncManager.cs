@@ -132,14 +132,6 @@ namespace DuskersCoopMod.Save
                 GalaxyProcessor.universeMapManager = null;
                 GalaxyMapManager.PreserveData = true;
 
-                // If GalaxyMapManager is currently active, reload UniverseSceneProcessor so that all 3D constellation nodes,
-                // galaxy nodes, and star systems regenerate 100% identically to the Host's universe!
-                if (GalaxyMapManager.Instance != null)
-                {
-                    Debug.Log("[DuskersCoopMod] Reloading UniverseSceneProcessor to instantiate Host's universe and galaxies!");
-                    UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
-                }
-
                 Debug.Log("[DuskersCoopMod] Successfully applied Host's synchronized save to SlotCoop!");
                 return true;
             }
