@@ -130,12 +130,53 @@ namespace DuskersCoopMod.Patches
         }
     }
 
+    [HarmonyPatch(typeof(StarSystemInfo))]
+    public static class StarSystemInfoPatches
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("get_Dungeons")]
+        public static void get_Dungeons_Postfix(StarSystemInfo __instance, ref System.Collections.Generic.List<DungeonInfo> __result)
+        {
+            if (__instance == null) return;
+            if (__result == null)
+            {
+                __result = new System.Collections.Generic.List<DungeonInfo>();
+                __instance.Dungeons = __result;
+            }
+
+            if (__result.Count == 0)
+            {
+                int seed = UnityEngine.Random.Range(10000, 999999);
+                var d = GalaxyProcessor.BuildNormalDungeon(1, DungeonTypeEnum.Derelict, __instance, seed, 1);
+                if (d != null)
+                {
+                    d.Parent = __instance;
+                    d.HaveVisited = false;
+                    __result.Add(d);
+                    Debug.LogWarning($"[DuskersCoopMod] Guaranteed fallback derelict in StarSystemInfo.Dungeons for {__instance.Name} (seed: {seed})");
+                }
+            }
+        }
+    }
+
     [HarmonyPatch]
     public static class GalaxyProcessorPatches
     {
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GalaxyProcessor), "GenerateDungeonInfo", new Type[] { typeof(StarSystemInfo), typeof(bool), typeof(GalaxyProcessor.DungeonProcessorCB) })]
         public static void GenerateDungeonInfo_Postfix(StarSystemInfo starSystemInfo)
+        {
+            EnsureSystemHasDungeons(starSystemInfo);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GalaxyProcessor), "GenerateNurseryDungeonsFromData", new Type[] { typeof(StarSystemInfo) })]
+        public static void GenerateNurseryDungeonsFromData_Postfix(StarSystemInfo starSystemInfo)
+        {
+            EnsureSystemHasDungeons(starSystemInfo);
+        }
+
+        public static void EnsureSystemHasDungeons(StarSystemInfo starSystemInfo)
         {
             if (starSystemInfo == null) return;
             try
@@ -179,7 +220,7 @@ namespace DuskersCoopMod.Patches
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[DuskersCoopMod] Error in GenerateDungeonInfo_Postfix: {ex}");
+                Debug.LogError($"[DuskersCoopMod] Error in EnsureSystemHasDungeons: {ex}");
             }
         }
     }
@@ -310,6 +351,21 @@ namespace DuskersCoopMod.Patches
             }
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch("DoAwake")]
+        public static void DoAwake_Prefix()
+        {
+            try
+            {
+                var p = GlobalSettings.GameState != null ? GlobalSettings.GameState.ThePlayer : null;
+                if (p != null && p.CurrentStarSystem != null)
+                {
+                    GalaxyProcessorPatches.EnsureSystemHasDungeons(p.CurrentStarSystem);
+                }
+            }
+            catch {}
+        }
+
         [HarmonyFinalizer]
         [HarmonyPatch("DoAwake")]
         public static Exception DoAwake_Finalizer(Exception __exception, GalaxyMapManager __instance)
@@ -322,10 +378,7 @@ namespace DuskersCoopMod.Patches
                     var p = GlobalSettings.GameState != null ? GlobalSettings.GameState.ThePlayer : null;
                     if (p != null && p.CurrentStarSystem != null)
                     {
-                        if (p.CurrentStarSystem.Dungeons == null || p.CurrentStarSystem.Dungeons.Count == 0)
-                        {
-                            GalaxyProcessorPatches.GenerateDungeonInfo_Postfix(p.CurrentStarSystem);
-                        }
+                        GalaxyProcessorPatches.EnsureSystemHasDungeons(p.CurrentStarSystem);
                         if (p.CurrentStarSystem.Dungeons != null && p.CurrentStarSystem.Dungeons.Count > 0)
                         {
                             var d = p.CurrentStarSystem.Dungeons[0];
@@ -336,6 +389,18 @@ namespace DuskersCoopMod.Patches
                 }
                 catch {}
                 return null; // Suppresses exception to prevent CrashHandler.CrashAndQuit from closing the game!
+            }
+            return null;
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch("Start")]
+        public static Exception Start_Finalizer(Exception __exception)
+        {
+            if (__exception != null)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Suppressed exception in GalaxyMapManager.Start: {__exception}");
+                return null;
             }
             return null;
         }
@@ -351,6 +416,10 @@ namespace DuskersCoopMod.Patches
                 {
                     dungeon = curSys.Dungeons[0];
                 }
+            }
+            if (dungeon != null)
+            {
+                Traverse.Create(__instance).Property("SelectedDungeon")?.SetValue(dungeon);
             }
             return dungeon != null;
         }
