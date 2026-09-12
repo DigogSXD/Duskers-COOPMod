@@ -412,6 +412,20 @@ namespace DuskersCoopMod.Patches
             }
         }
 
+        [HarmonyPrefix]
+        [HarmonyPatch("BoardCurrentDungeon")]
+        public static bool BoardCurrentDungeon_Prefix()
+        {
+            if (IsApplyingRemoteAction) return true;
+            var net = CoopNetworkManager.Instance;
+            if (net != null && net.Role == NetworkRole.Client)
+            {
+                net.PrintToLocalConsole("[COOP] Derelict boarding is initiated by the Host operator.", ConsoleMessageType.Warning);
+                return false;
+            }
+            return true;
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch("BoardCurrentDungeon")]
         public static void BoardCurrentDungeon_Postfix(GalaxyMapManager __instance)
@@ -427,15 +441,17 @@ namespace DuskersCoopMod.Patches
                     ?? GlobalSettings.GameState?.ThePlayer?.CurrentDockedDungeon;
 
                 string dungName = "";
+                string dungGroup = "";
                 if (selDung != null)
                 {
                     dungName = !string.IsNullOrEmpty(selDung.DisplayName) ? selDung.DisplayName : selDung.Name;
+                    dungGroup = selDung.GroupKey ?? "";
                 }
 
                 net.BroadcastPacket(PacketWrapper.Create("STRATEGIC_ACTION", "Host", new StrategicActionData
                 {
                     action = "BOARD_DUNGEON",
-                    targetName = dungName
+                    targetName = !string.IsNullOrEmpty(dungGroup) ? $"{dungName}|{dungGroup}" : dungName
                 }));
             }
         }
