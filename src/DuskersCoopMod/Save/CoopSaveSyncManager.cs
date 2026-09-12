@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Text;
 using DuskersCoopMod.Network;
 using UnityEngine;
@@ -52,7 +51,7 @@ namespace DuskersCoopMod.Save
                     {
                         string relative = filePath.Substring(sourceDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                         FileInfo fi = new FileInfo(filePath);
-                        if (fi.Length > 2000000) continue; // skip files > 2MB
+                        if (fi.Length > 500000) continue; // skip files > 500KB
 
                         package.items.Add(new SaveFileItem
                         {
@@ -64,15 +63,7 @@ namespace DuskersCoopMod.Save
 
                 string json = JsonUtility.ToJson(package);
                 byte[] rawBytes = Encoding.UTF8.GetBytes(json);
-
-                using (MemoryStream ms = new MemoryStream())
-                {
-                    using (GZipStream gzip = new GZipStream(ms, CompressionMode.Compress, true))
-                    {
-                        gzip.Write(rawBytes, 0, rawBytes.Length);
-                    }
-                    return Convert.ToBase64String(ms.ToArray());
-                }
+                return Convert.ToBase64String(rawBytes);
             }
             catch (Exception ex)
             {
@@ -81,25 +72,12 @@ namespace DuskersCoopMod.Save
             }
         }
 
-        public static bool ApplyReceivedSave(string compressedBase64)
+        public static bool ApplyReceivedSave(string rawBase64)
         {
             try
             {
-                byte[] compressedBytes = Convert.FromBase64String(compressedBase64);
-                string json;
-
-                using (MemoryStream ms = new MemoryStream(compressedBytes))
-                using (GZipStream gzip = new GZipStream(ms, CompressionMode.Decompress))
-                using (MemoryStream outMs = new MemoryStream())
-                {
-                    byte[] buffer = new byte[4096];
-                    int read;
-                    while ((read = gzip.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        outMs.Write(buffer, 0, read);
-                    }
-                    json = Encoding.UTF8.GetString(outMs.ToArray());
-                }
+                byte[] rawBytes = Convert.FromBase64String(rawBase64);
+                string json = Encoding.UTF8.GetString(rawBytes);
 
                 SavePackageData package = JsonUtility.FromJson<SavePackageData>(json);
                 if (package == null || package.items == null) return false;
