@@ -861,6 +861,7 @@ namespace DuskersCoopMod.Network
                         GalaxyMapManager.hasBoardedDungeon = true;
 
                         string rawTarget = data.targetName ?? "";
+                        Debug.Log($"[DuskersCoopMod] [v1.1.1] BOARD_DUNGEON received from host: '{rawTarget}'");
                         string targetName = rawTarget;
                         string targetGroup = "";
                         if (rawTarget.Contains("|"))
