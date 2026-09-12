@@ -135,45 +135,45 @@ namespace DuskersCoopMod.Patches
     {
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GalaxyProcessor), "GenerateDungeonInfo", new Type[] { typeof(StarSystemInfo), typeof(bool), typeof(GalaxyProcessor.DungeonProcessorCB) })]
-        public static void GenerateDungeonInfo_Postfix(StarSystemInfo starSystem)
+        public static void GenerateDungeonInfo_Postfix(StarSystemInfo starSystemInfo)
         {
-            if (starSystem == null) return;
+            if (starSystemInfo == null) return;
             try
             {
-                if (starSystem.Dungeons == null)
+                if (starSystemInfo.Dungeons == null)
                 {
-                    starSystem.Dungeons = new System.Collections.Generic.List<DungeonInfo>();
+                    starSystemInfo.Dungeons = new System.Collections.Generic.List<DungeonInfo>();
                 }
 
-                if (starSystem.Dungeons.Count == 0)
+                if (starSystemInfo.Dungeons.Count == 0)
                 {
                     int seed = UnityEngine.Random.Range(10000, 999999);
-                    var d = GalaxyProcessor.BuildNormalDungeon(1, DungeonTypeEnum.Derelict, starSystem, seed, 1);
+                    var d = GalaxyProcessor.BuildNormalDungeon(1, DungeonTypeEnum.Derelict, starSystemInfo, seed, 1);
                     if (d != null)
                     {
-                        d.Parent = starSystem;
+                        d.Parent = starSystemInfo;
                         d.HaveVisited = false;
-                        starSystem.Dungeons.Add(d);
-                        Debug.LogWarning($"[DuskersCoopMod] Injected fallback derelict into empty system {starSystem.Name} (seed: {seed})");
+                        starSystemInfo.Dungeons.Add(d);
+                        Debug.LogWarning($"[DuskersCoopMod] Injected fallback derelict into empty system {starSystemInfo.Name} (seed: {seed})");
                     }
                 }
 
-                if (starSystem.Dungeons.Count > 0)
+                if (starSystemInfo.Dungeons.Count > 0)
                 {
-                    if (!starSystem.Dungeons.Exists(d => d != null && !d.HaveVisited))
+                    if (!starSystemInfo.Dungeons.Exists(d => d != null && !d.HaveVisited))
                     {
-                        starSystem.Dungeons[0].HaveVisited = false;
-                        if (!string.IsNullOrEmpty(starSystem.Dungeons[0].GroupKey))
+                        starSystemInfo.Dungeons[0].HaveVisited = false;
+                        if (!string.IsNullOrEmpty(starSystemInfo.Dungeons[0].GroupKey))
                         {
-                            GalaxySaveFile.Save<bool>(starSystem.Dungeons[0].GroupKey, "VISITED", false);
+                            GalaxySaveFile.Save<bool>(starSystemInfo.Dungeons[0].GroupKey, "VISITED", false);
                         }
                     }
 
-                    var target = starSystem.Dungeons.Find(d => d != null && !d.HaveVisited) ?? starSystem.Dungeons[0];
+                    var target = starSystemInfo.Dungeons.Find(d => d != null && !d.HaveVisited) ?? starSystemInfo.Dungeons[0];
                     if (target != null && !string.IsNullOrEmpty(target.GroupKey))
                     {
-                        GalaxySaveFile.Save<string>(starSystem.GroupKey, "LAST_DOCKED_ID", target.GroupKey);
-                        GalaxySaveFile.Save<string>(starSystem.GroupKey, "LAST_SELECTED_ID", target.GroupKey);
+                        GalaxySaveFile.Save<string>(starSystemInfo.GroupKey, "LAST_DOCKED_ID", target.GroupKey);
+                        GalaxySaveFile.Save<string>(starSystemInfo.GroupKey, "LAST_SELECTED_ID", target.GroupKey);
                     }
                 }
             }
@@ -342,7 +342,7 @@ namespace DuskersCoopMod.Patches
 
         [HarmonyPrefix]
         [HarmonyPatch("SetSelectedDungeon", new Type[] { typeof(DungeonInfo), typeof(bool) })]
-        public static bool SetSelectedDungeon_Prefix(GalaxyMapManager __instance, ref DungeonInfo dungeon, bool playSound)
+        public static bool SetSelectedDungeon_Prefix(GalaxyMapManager __instance, ref DungeonInfo dungeon)
         {
             if (dungeon == null)
             {
