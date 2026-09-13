@@ -83,7 +83,7 @@ namespace DuskersCoopMod.Network
         public string RemoteEndpointInfo => _remoteInfo;
 
         public const int DEFAULT_PORT = 7777;
-        public const string MOD_VERSION = "1.1.2";
+        public const string MOD_VERSION = "1.1.3";
 
         public int CurrentPort { get; private set; } = DEFAULT_PORT;
 

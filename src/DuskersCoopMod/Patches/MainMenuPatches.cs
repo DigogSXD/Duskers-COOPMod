@@ -185,4 +185,46 @@ namespace DuskersCoopMod.Patches
             }
         }
     }
+
+    [HarmonyPatch(typeof(MenuPanelUI))]
+    public static class MenuPanelUIPatches
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("PopMenu", new Type[] { typeof(MenuScreenClass) })]
+        public static bool PopMenu_Prefix(MenuPanelUI __instance, MenuScreenClass menu)
+        {
+            try
+            {
+                if (__instance == null || menu == null) return false;
+                var tr = Traverse.Create(__instance);
+                var stack = tr.Field("screenStack").GetValue<System.Collections.IList>();
+                if (stack == null || stack.Count == 0)
+                {
+                    try { Traverse.Create(__instance).Method("CloseMenu")?.GetValue(); } catch { }
+                    return false;
+                }
+
+                bool found = false;
+                for (int i = 0; i < stack.Count; i++)
+                {
+                    if (stack[i] == menu)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Handled PopMenu safely: {ex.Message}");
+                return false;
+            }
+            return true;
+        }
+    }
 }

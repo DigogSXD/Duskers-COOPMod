@@ -111,16 +111,38 @@ namespace DuskersCoopMod.Save
             {
                 GalaxyProcessor.universeMapManager = null;
                 GalaxyMapManager.PreserveData = true;
+                GlobalSettings.IsTutorial = false;
+                GlobalSettings.FirstTimeIn = true;
+
+                bool launched = false;
                 if (MainMenu.Instance != null)
                 {
                     try
                     {
                         Debug.Log("[DuskersCoopMod] Client received Host Galaxy State in MainMenu. Launching game directly into space!");
                         MainMenu.LaunchGameFinal();
+                        launched = true;
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"[DuskersCoopMod] Error launching game from GalaxyState: {ex}");
+                        Debug.LogWarning($"[DuskersCoopMod] MainMenu.LaunchGameFinal threw ({ex.Message}), falling back to direct scene load.");
+                    }
+                }
+
+                if (!launched)
+                {
+                    try
+                    {
+                        if (MenuPanelUI.Instance != null)
+                        {
+                            try { Traverse.Create(MenuPanelUI.Instance).Method("CloseMenu")?.GetValue(); } catch { }
+                        }
+                        UnityEngine.Resources.UnloadUnusedAssets();
+                        UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[DuskersCoopMod] Error in direct scene load: {ex}");
                     }
                 }
                 return;
