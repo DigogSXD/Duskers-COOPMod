@@ -226,6 +226,8 @@ namespace DuskersCoopMod.Network
         {
             if (!IsSteamActive) return;
 
+            try { SteamAPI.RunCallbacks(); } catch { }
+
             uint size;
             while (SteamNetworking.IsP2PPacketAvailable(out size, 0))
             {

@@ -1,8 +1,8 @@
 # 🛰️ Duskers CO-OP Mod
 
-[![Download Mod](https://img.shields.io/badge/Download%20Mod-v1.1.4%20(Clique%20para%20Baixar)-brightgreen?style=for-the-badge&logo=github)](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.4.zip)
+[![Download Mod](https://img.shields.io/badge/Download%20Mod-v1.1.5%20(Clique%20para%20Baixar)-brightgreen?style=for-the-badge&logo=github)](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.5.zip)
 
-[![Release](https://img.shields.io/badge/Release-v1.1.4-green.svg)](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.4.zip)
+[![Release](https://img.shields.io/badge/Release-v1.1.5-green.svg)](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.5.zip)
 [![Game Version](https://img.shields.io/badge/Duskers-v1.205%2B-blue.svg)](https://store.steampowered.com/app/254320/Duskers/)
 [![Framework](https://img.shields.io/badge/BepInEx-5.4.21.0%20(x86)-orange.svg)](https://github.com/BepInEx/BepInEx/releases)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
@@ -47,7 +47,7 @@ Instalar o mod leva menos de 2 minutos. Siga os passos abaixo:
 
 ### Passo 2: Instalar o Duskers CO-OP Mod
 1. Baixe o pacote pronto do mod:  
-   👉 [**Download DuskersCoopMod_v1.1.4.zip**](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.4.zip)  
+   👉 [**Download DuskersCoopMod_v1.1.5.zip**](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/DuskersCoopMod_v1.1.5.zip)  
    *(Se você já tem o mod instalado e só quer atualizar, baixe apenas a [**DuskersCoopMod.dll**](https://github.com/DigogSXD/Duskers-COOPMod/raw/main/releases/BepInEx/plugins/DuskersCoopMod.dll) e coloque na pasta `BepInEx/plugins/`).*
 2. Extraia o conteúdo para a pasta do Duskers, substituindo os arquivos se solicitado.  
    Isso instalará:
@@ -134,7 +134,7 @@ DuskersCoopMod/
 │       ├── CoopPlugin.cs        # Plugin BepInEx principal
 │       └── DuskersCoopMod.csproj
 ├── releases/                    # Pacotes compilados e configurados prontos para uso
-│   ├── DuskersCoopMod_v1.1.4.zip
+│   ├── DuskersCoopMod_v1.1.5.zip
 │   └── BepInEx/
 └── tools/
     └── coop_terminal_client.py  # Cliente CLI em Python para testes e monitoramento

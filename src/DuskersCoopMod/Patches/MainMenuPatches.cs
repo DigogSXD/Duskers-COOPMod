@@ -150,7 +150,7 @@ namespace DuskersCoopMod.Patches
                 }
 
                 ObjectiveManual.Reset();
-                Application.runInBackground = GameSaveFile.Get("O_RIB", false);
+                Application.runInBackground = true;
 
                 // Call base.LoadMenu()
                 MenuPanelUI.Instance.PushMenu(__instance);

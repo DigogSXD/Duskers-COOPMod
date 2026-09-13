@@ -11,7 +11,7 @@ namespace DuskersCoopMod
     {
         public const string PLUGIN_GUID = "com.diogo.duskerscoop";
         public const string PLUGIN_NAME = "Duskers Coop Mod";
-        public const string PLUGIN_VERSION = "1.1.4";
+        public const string PLUGIN_VERSION = "1.1.5";
 
         public static ConfigEntry<int> ConfigPort;
 
@@ -19,6 +19,7 @@ namespace DuskersCoopMod
 
         private void Awake()
         {
+            Application.runInBackground = true;
             Logger.LogInfo($"{PLUGIN_NAME} v{PLUGIN_VERSION} initializing...");
 
             try
