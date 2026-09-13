@@ -144,4 +144,12 @@ namespace DuskersCoopMod.Network
     {
         public System.Collections.Generic.List<DoorSyncItem> doors = new System.Collections.Generic.List<DoorSyncItem>();
     }
+
+    [Serializable]
+    public class SingleDoorSyncPacket
+    {
+        public string label;
+        public bool isOpen;
+    }
 }
+

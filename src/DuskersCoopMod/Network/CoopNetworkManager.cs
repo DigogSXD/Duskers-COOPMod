@@ -120,6 +120,8 @@ namespace DuskersCoopMod.Network
         private float _lastReportedClientDroneRotY = 0f;
         private float _lastClientSteeringTime = 0f;
         private int _lastClientSteeringDrone = -1;
+        public float LastClientSteeringTime => _lastClientSteeringTime;
+        public int LastClientSteeringDrone => _lastClientSteeringDrone;
 
         private void Awake()
         {
@@ -418,6 +420,15 @@ namespace DuskersCoopMod.Network
             BroadcastPacket(json);
         }
 
+        public void BroadcastDoorState(string label, bool isOpen)
+        {
+            if (Role == NetworkRole.Host && ConnectedCount > 0)
+            {
+                var packet = new SingleDoorSyncPacket { label = label, isOpen = isOpen };
+                BroadcastPacket(PacketWrapper.Create("SINGLE_DOOR_SYNC", "Host", packet));
+            }
+        }
+
         private void HostListenerLoop(int port)
         {
             try
@@ -706,6 +717,17 @@ namespace DuskersCoopMod.Network
                         if (doorsData != null)
                         {
                             ApplyDoorsSync(doorsData);
+                        }
+                    }
+                    break;
+
+                case "SINGLE_DOOR_SYNC":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var singleDoor = packet.GetData<SingleDoorSyncPacket>();
+                        if (singleDoor != null && !string.IsNullOrEmpty(singleDoor.label))
+                        {
+                            ApplySingleDoorSync(singleDoor.label, singleDoor.isOpen);
                         }
                     }
                     break;
@@ -1264,6 +1286,8 @@ namespace DuskersCoopMod.Network
                     Vector3 targetPos = new Vector3(item.x, item.y, 0f);
                     drone.MoveToPosition(targetPos);
                     drone.LastPosition = targetPos;
+                    Traverse.Create(drone).Field("_directionalForce")?.SetValue(Vector3.zero);
+                    Traverse.Create(drone).Field("distPerFrame")?.SetValue(Vector3.zero);
                     if (drone.transform != null)
                     {
                         float targetRotZ = (item.rotZ != 0f) ? item.rotZ : item.rotY;
@@ -1298,6 +1322,8 @@ namespace DuskersCoopMod.Network
                     Vector3 targetPos = new Vector3(packet.x, packet.y, 0f);
                     drone.MoveToPosition(targetPos);
                     drone.LastPosition = targetPos;
+                    Traverse.Create(drone).Field("_directionalForce")?.SetValue(Vector3.zero);
+                    Traverse.Create(drone).Field("distPerFrame")?.SetValue(Vector3.zero);
                     if (drone.transform != null)
                     {
                         float targetRotZ = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY;
@@ -1318,42 +1344,175 @@ namespace DuskersCoopMod.Network
             }
         }
 
-        private void ApplyDoorsSync(DoorsSyncPacket packet)
+        public void ApplySingleDoorSync(string doorLabel, bool isOpen)
         {
-            if (packet == null || packet.doors == null || DungeonManager.Instance == null || DungeonManager.Instance.doors == null) return;
+            if (string.IsNullOrEmpty(doorLabel) || DungeonManager.Instance == null || DungeonManager.Instance.doors == null) return;
 
-            foreach (var item in packet.doors)
+            Patches.DoorPatches.IsApplyingDoorSync = true;
+            try
             {
-                if (item == null || string.IsNullOrEmpty(item.label)) continue;
                 foreach (var door in DungeonManager.Instance.doors)
                 {
                     if (door == null) continue;
                     string label = !string.IsNullOrEmpty(door.LabelSimple) ? door.LabelSimple : door.Label;
-                    if (string.Equals(label, item.label, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(label, doorLabel, StringComparison.OrdinalIgnoreCase))
                     {
-                        bool currentOpen = (door.state == DoorState.Open || door.IsTryingToOpen);
-                        if (item.isOpen && (!currentOpen || door.state != DoorState.Open))
+                        if (isOpen)
                         {
-                            door.open(false, false);
-                            door.state = DoorState.Open;
+                            ForceOpenDoor(door);
                         }
-                        else if (!item.isOpen && (currentOpen || door.state != DoorState.Closed))
+                        else
                         {
-                            try
-                            {
-                                Traverse.Create(door).Method("CloseDoor")?.GetValue();
-                            }
-                            catch
-                            {
-                                door.close(false);
-                            }
-                            door.state = DoorState.Closed;
+                            ForceCloseDoor(door);
                         }
                         break;
                     }
                 }
             }
+            finally
+            {
+                Patches.DoorPatches.IsApplyingDoorSync = false;
+            }
         }
+
+        private void ApplyDoorsSync(DoorsSyncPacket packet)
+        {
+            if (packet == null || packet.doors == null || DungeonManager.Instance == null || DungeonManager.Instance.doors == null) return;
+
+            Patches.DoorPatches.IsApplyingDoorSync = true;
+            try
+            {
+                foreach (var item in packet.doors)
+                {
+                    if (item == null || string.IsNullOrEmpty(item.label)) continue;
+                    foreach (var door in DungeonManager.Instance.doors)
+                    {
+                        if (door == null) continue;
+                        string label = !string.IsNullOrEmpty(door.LabelSimple) ? door.LabelSimple : door.Label;
+                        if (string.Equals(label, item.label, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (item.isOpen)
+                            {
+                                ForceOpenDoor(door);
+                            }
+                            else
+                            {
+                                ForceCloseDoor(door);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                Patches.DoorPatches.IsApplyingDoorSync = false;
+            }
+        }
+
+        private void ForceOpenDoor(Door door)
+        {
+            if (door == null) return;
+            if (door.state != DoorState.Open || door.IsTryingToClose)
+            {
+                door.state = DoorState.Closed;
+                door.open(false, false);
+                door.state = DoorState.Open;
+                Traverse.Create(door).Property("IsTryingToClose")?.SetValue(false);
+            }
+
+            EnsureDoorVisuals(door, true);
+
+            if (DungeonManager.Instance != null && !GlobalSettings.MissionStarted)
+            {
+                var boardingAirlock = BoardingShip.Instance?.CurrentAirlock?.door;
+                if (boardingAirlock == door)
+                {
+                    try { DungeonManager.Instance.StartMission(false); } catch { }
+                }
+            }
+        }
+
+        private void ForceCloseDoor(Door door)
+        {
+            if (door == null) return;
+            if (door.state != DoorState.Closed || door.IsTryingToOpen)
+            {
+                door.state = DoorState.Open;
+                try
+                {
+                    Traverse.Create(door).Method("CloseDoor")?.GetValue();
+                }
+                catch
+                {
+                    door.close(false);
+                }
+                door.state = DoorState.Closed;
+                Traverse.Create(door).Property("IsTryingToOpen")?.SetValue(false);
+            }
+
+            EnsureDoorVisuals(door, false);
+        }
+
+        private void EnsureDoorVisuals(Door door, bool isOpen)
+        {
+            if (door == null) return;
+            try
+            {
+                var fillRenderer = Traverse.Create(door).Field("fillSVCorridorRenderer")?.GetValue<Renderer>();
+                if (isOpen)
+                {
+                    if (door.sliderA != null && door.sliderB != null)
+                    {
+                        if (door.sliderA.localPosition.y < 0.5f)
+                        {
+                            door.sliderA.Translate(0f, 1f, 0f);
+                            door.sliderB.Translate(0f, -1f, 0f);
+                        }
+                    }
+                    if (fillRenderer != null)
+                    {
+                        fillRenderer.enabled = true;
+                    }
+                    if (door.tiles != null && door.tiles.Length > 0 && door.onSchematic)
+                    {
+                        for (int i = 0; i < door.tiles.Length; i++)
+                        {
+                            if (door.tiles[i] != null) door.tiles[i].SetActive(true);
+                        }
+                    }
+                    door.AirlockOpenedEvent?.Invoke(door);
+                    door.DoorOpenedEvent?.Invoke(door);
+                }
+                else
+                {
+                    if (door.sliderA != null && door.sliderB != null)
+                    {
+                        if (door.sliderA.localPosition.y > 0.5f)
+                        {
+                            door.sliderA.Translate(0f, -1f, 0f);
+                            door.sliderB.Translate(0f, 1f, 0f);
+                        }
+                    }
+                    if (fillRenderer != null)
+                    {
+                        fillRenderer.enabled = false;
+                    }
+                    if (door.tiles != null && door.tiles.Length > 0 && door.onSchematic)
+                    {
+                        for (int i = 0; i < door.tiles.Length; i++)
+                        {
+                            if (door.tiles[i] != null) door.tiles[i].SetActive(false);
+                        }
+                    }
+                    door.AirlockClosedEvent?.Invoke(door);
+                    door.DoorClosedEvent?.Invoke(door);
+                }
+            }
+            catch { }
+        }
+
+
 
         private void ExecuteLocalCommand(string command)
         {

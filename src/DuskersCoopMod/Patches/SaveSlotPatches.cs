@@ -112,21 +112,6 @@ namespace DuskersCoopMod.Patches
                 return false;
             }
 
-        return true;
-        }
-    }
-
-    [HarmonyPatch(typeof(Debug))]
-    public static class DebugLogPatches
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("LogError", new Type[] { typeof(object) })]
-        public static bool LogError_Prefix(object message)
-        {
-            if (message != null && message.ToString().StartsWith("There were 2+ OBJ_ in the data with the same ID"))
-            {
-                return false;
-            }
             return true;
         }
     }
