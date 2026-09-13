@@ -231,6 +231,8 @@ namespace DuskersCoopMod.Network
 
             Disconnect();
             Role = NetworkRole.Client;
+            DuskersCoopMod.Save.SaveSlotManager.IsUsingCoopRemoteSlot = true;
+            try { GameFileHelper.EnsureGameFileDirectoriesExist(); } catch { }
             _isRunning = true;
 
             _mainNetworkThread = new Thread(() => ClientWorker(ip, port))

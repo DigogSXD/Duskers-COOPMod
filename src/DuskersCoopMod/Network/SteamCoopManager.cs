@@ -163,6 +163,8 @@ namespace DuskersCoopMod.Network
             // Guest connects to Host via Steam P2P
             Debug.Log($"[DuskersCoopMod] Guest entered Steam Lobby! Connecting to host Steam ID: {owner}");
             CoopNetworkManager.Instance.Role = NetworkRole.Client;
+            DuskersCoopMod.Save.SaveSlotManager.IsUsingCoopRemoteSlot = true;
+            try { GameFileHelper.EnsureGameFileDirectoriesExist(); } catch { }
 
             SteamNetworking.AcceptP2PSessionWithUser(owner);
 
@@ -200,6 +202,8 @@ namespace DuskersCoopMod.Network
             LeaveLobby();
             HostSteamId = hostSteamId;
             CoopNetworkManager.Instance.Role = NetworkRole.Client;
+            DuskersCoopMod.Save.SaveSlotManager.IsUsingCoopRemoteSlot = true;
+            try { GameFileHelper.EnsureGameFileDirectoriesExist(); } catch { }
 
             SteamNetworking.AcceptP2PSessionWithUser(hostSteamId);
 

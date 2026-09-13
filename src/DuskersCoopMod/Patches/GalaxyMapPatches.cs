@@ -233,22 +233,25 @@ namespace DuskersCoopMod.Patches
                     }
                 }
 
-                if (starSystemInfo.Dungeons.Count > 0)
+                var net = DuskersCoopMod.Network.CoopNetworkManager.Instance;
+                bool isClient = (net != null && net.Role == DuskersCoopMod.Network.NetworkRole.Client) || DuskersCoopMod.Save.SaveSlotManager.IsUsingCoopRemoteSlot;
+
+                if (!isClient && starSystemInfo.Dungeons.Count > 0)
                 {
                     if (!starSystemInfo.Dungeons.Exists(d => d != null && !d.HaveVisited))
                     {
                         starSystemInfo.Dungeons[0].HaveVisited = false;
                         if (!string.IsNullOrEmpty(starSystemInfo.Dungeons[0].GroupKey))
                         {
-                            GalaxySaveFile.Save<bool>(starSystemInfo.Dungeons[0].GroupKey, "VISITED", false);
+                            try { GalaxySaveFile.Save<bool>(starSystemInfo.Dungeons[0].GroupKey, "VISITED", false); } catch { }
                         }
                     }
 
                     var target = starSystemInfo.Dungeons.Find(d => d != null && !d.HaveVisited) ?? starSystemInfo.Dungeons[0];
                     if (target != null && !string.IsNullOrEmpty(target.GroupKey))
                     {
-                        GalaxySaveFile.Save<string>(starSystemInfo.GroupKey, "LAST_DOCKED_ID", target.GroupKey);
-                        GalaxySaveFile.Save<string>(starSystemInfo.GroupKey, "LAST_SELECTED_ID", target.GroupKey);
+                        try { GalaxySaveFile.Save<string>(starSystemInfo.GroupKey, "LAST_DOCKED_ID", target.GroupKey); } catch { }
+                        try { GalaxySaveFile.Save<string>(starSystemInfo.GroupKey, "LAST_SELECTED_ID", target.GroupKey); } catch { }
                     }
                 }
             }
@@ -391,6 +394,10 @@ namespace DuskersCoopMod.Patches
 
         public static void RepairNurseryKeys()
         {
+            var net = DuskersCoopMod.Network.CoopNetworkManager.Instance;
+            bool isClient = (net != null && net.Role == DuskersCoopMod.Network.NetworkRole.Client) || DuskersCoopMod.Save.SaveSlotManager.IsUsingCoopRemoteSlot;
+            if (isClient) return;
+
             try
             {
                 var uniGroups = UniverseSaveFile.GetAllGroups("OBJN_");
