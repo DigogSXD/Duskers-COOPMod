@@ -83,7 +83,7 @@ namespace DuskersCoopMod.Network
         public string RemoteEndpointInfo => _remoteInfo;
 
         public const int DEFAULT_PORT = 7777;
-        public const string MOD_VERSION = "1.1.0";
+        public const string MOD_VERSION = "1.1.2";
 
         public int CurrentPort { get; private set; } = DEFAULT_PORT;
 
@@ -111,6 +111,13 @@ namespace DuskersCoopMod.Network
 
         // Flag to prevent echoing back
         public bool IsApplyingRemoteConsoleMessage = false;
+
+        // Tactical synchronization timers and state
+        private float _lastTacticalDronesSyncTime = 0f;
+        private float _lastTacticalDoorsSyncTime = 0f;
+        private float _lastClientDroneSyncTime = 0f;
+        private Vector3 _lastReportedClientDronePos = Vector3.zero;
+        private float _lastReportedClientDroneRotY = 0f;
 
         private void Awake()
         {
@@ -185,6 +192,8 @@ namespace DuskersCoopMod.Network
                     }
                 }
             }
+
+            UpdateTacticalSync();
         }
 
         public void StartHost(int port = 0)
@@ -343,23 +352,21 @@ namespace DuskersCoopMod.Network
             }
         }
 
-        public void SendCommand(string command)
+        public void SendPacketToHost(string rawJson)
         {
             if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamClient)
             {
-                string p2pJson = PacketWrapper.Create("COMMAND", "Client", new CommandData { command = command });
-                SteamCoopManager.Instance.SendP2PToHost(p2pJson);
+                SteamCoopManager.Instance.SendP2PToHost(rawJson);
                 return;
             }
 
             if (Role == NetworkRole.Client && _isConnected && _singleWriter != null)
             {
-                string json = PacketWrapper.Create("COMMAND", "Client", new CommandData { command = command });
                 try
                 {
                     lock (_singleWriter)
                     {
-                        _singleWriter.WriteLine(json);
+                        _singleWriter.WriteLine(rawJson);
                     }
                 }
                 catch
@@ -367,6 +374,12 @@ namespace DuskersCoopMod.Network
                     _isConnected = false;
                 }
             }
+        }
+
+        public void SendCommand(string command)
+        {
+            string json = PacketWrapper.Create("COMMAND", "Client", new CommandData { command = command });
+            SendPacketToHost(json);
         }
 
         public void SendConsoleText(string text, ConsoleMessageType type, ConsoleMessageFormat format)
@@ -582,6 +595,51 @@ namespace DuskersCoopMod.Network
                             string tag = string.IsNullOrEmpty(packet.sender) ? "Operator" : packet.sender;
                             PrintToLocalConsole($"[{tag}] > {cmdData.command}", ConsoleMessageType.Info);
                             ExecuteAuthoritativeCommand(cmdData.command);
+                            BroadcastPacket(PacketWrapper.Create("EXECUTE_COMMAND", tag, cmdData));
+                        }
+                    }
+                    break;
+
+                case "EXECUTE_COMMAND":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var cmdData = packet.GetData<CommandData>();
+                        if (cmdData != null && !string.IsNullOrEmpty(cmdData.command))
+                        {
+                            ExecuteLocalCommand(cmdData.command);
+                        }
+                    }
+                    break;
+
+                case "DRONES_SYNC":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var dronesData = packet.GetData<DronesSyncPacket>();
+                        if (dronesData != null)
+                        {
+                            ApplyDronesSync(dronesData);
+                        }
+                    }
+                    break;
+
+                case "CLIENT_DRONE_SYNC":
+                    if (Role == NetworkRole.Host)
+                    {
+                        var clientDrone = packet.GetData<ClientDroneSyncPacket>();
+                        if (clientDrone != null)
+                        {
+                            ApplyClientDroneSync(clientDrone);
+                        }
+                    }
+                    break;
+
+                case "DOORS_SYNC":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var doorsData = packet.GetData<DoorsSyncPacket>();
+                        if (doorsData != null)
+                        {
+                            ApplyDoorsSync(doorsData);
                         }
                     }
                     break;
@@ -861,14 +919,24 @@ namespace DuskersCoopMod.Network
                         GalaxyMapManager.hasBoardedDungeon = true;
 
                         string rawTarget = data.targetName ?? "";
-                        Debug.Log($"[DuskersCoopMod] [v1.1.1] BOARD_DUNGEON received from host: '{rawTarget}'");
+                        Debug.Log($"[DuskersCoopMod] [v1.1.2] BOARD_DUNGEON received from host: '{rawTarget}' (Seed: {data.dungeonSeed}, Group: {data.dungeonGroup})");
                         string targetName = rawTarget;
-                        string targetGroup = "";
+                        string targetGroup = !string.IsNullOrEmpty(data.dungeonGroup) ? data.dungeonGroup : "";
                         if (rawTarget.Contains("|"))
                         {
                             var parts = rawTarget.Split('|');
                             targetName = parts[0];
-                            targetGroup = parts.Length > 1 ? parts[1] : "";
+                            if (string.IsNullOrEmpty(targetGroup) && parts.Length > 1) targetGroup = parts[1];
+                        }
+
+                        if (data.dungeonSeed != 0)
+                        {
+                            Patches.DungeonPatches.SynchronizedDungeonSeed = data.dungeonSeed;
+                            UnityEngine.Random.seed = data.dungeonSeed;
+                            if (!string.IsNullOrEmpty(targetGroup))
+                            {
+                                GalaxySaveFile.Save(targetGroup, "SEED_D", data.dungeonSeed);
+                            }
                         }
 
                         DungeonInfo targetDungeon = null;
@@ -914,6 +982,10 @@ namespace DuskersCoopMod.Network
                                 player.CurrentStarSystem = targetDungeon.Parent;
                             }
                             player.CurrentDockedDungeon = targetDungeon;
+                            if (data.dungeonSeed != 0 && !string.IsNullOrEmpty(targetDungeon.GroupKey))
+                            {
+                                GalaxySaveFile.Save(targetDungeon.GroupKey, "SEED_D", data.dungeonSeed);
+                            }
                             if (GalaxyMapManager.Instance != null)
                             {
                                 GalaxyMapManager.Instance.SetSelectedDungeon(targetDungeon, false);
@@ -927,6 +999,11 @@ namespace DuskersCoopMod.Network
                         Debug.LogError($"[DuskersCoopMod] Error in BOARD_DUNGEON: {ex}. Loading dungeon scene directly.");
                         GlobalSettings.GameStartedFromGalaxyMap = true;
                         GalaxyMapManager.hasBoardedDungeon = true;
+                        if (data.dungeonSeed != 0)
+                        {
+                            Patches.DungeonPatches.SynchronizedDungeonSeed = data.dungeonSeed;
+                            UnityEngine.Random.seed = data.dungeonSeed;
+                        }
                         if (Mothership.Instance != null) Mothership.Instance.Stop();
                         UnityEngine.Application.LoadLevel("DungeonScene_Generated_Pro");
                     }
@@ -938,17 +1015,197 @@ namespace DuskersCoopMod.Network
             }
         }
 
+        private void UpdateTacticalSync()
+        {
+            if (!IsConnected) return;
+
+            // Host authoritative tactical broadcast
+            if (Role == NetworkRole.Host && ConnectedCount > 0)
+            {
+                // Drones sync at 20 Hz
+                if (Time.time - _lastTacticalDronesSyncTime >= 0.05f)
+                {
+                    _lastTacticalDronesSyncTime = Time.time;
+                    if (DroneManager.Instance != null && DroneManager.Instance.dronesList != null && DroneManager.Instance.dronesList.Count > 0)
+                    {
+                        var packet = new DronesSyncPacket();
+                        foreach (var d in DroneManager.Instance.dronesList)
+                        {
+                            if (d == null) continue;
+                            packet.drones.Add(new DroneSyncItem
+                            {
+                                droneNumber = d.DroneNumber,
+                                x = d.transform.position.x,
+                                y = d.transform.position.y,
+                                z = d.transform.position.z,
+                                rotY = d.transform.eulerAngles.y,
+                                hp = d.CurrentHitPoints,
+                                isDead = d.IsDead
+                            });
+                        }
+                        if (packet.drones.Count > 0)
+                        {
+                            BroadcastPacket(PacketWrapper.Create("DRONES_SYNC", "Host", packet));
+                        }
+                    }
+                }
+
+                // Doors sync at 3 Hz
+                if (Time.time - _lastTacticalDoorsSyncTime >= 0.33f)
+                {
+                    _lastTacticalDoorsSyncTime = Time.time;
+                    if (DungeonManager.Instance != null && DungeonManager.Instance.doors != null && DungeonManager.Instance.doors.Length > 0)
+                    {
+                        var packet = new DoorsSyncPacket();
+                        foreach (var door in DungeonManager.Instance.doors)
+                        {
+                            if (door == null) continue;
+                            string label = !string.IsNullOrEmpty(door.LabelSimple) ? door.LabelSimple : door.Label;
+                            if (string.IsNullOrEmpty(label)) continue;
+
+                            bool isOpen = door.state == DoorState.Open || door.IsTryingToOpen;
+                            packet.doors.Add(new DoorSyncItem
+                            {
+                                label = label,
+                                isOpen = isOpen
+                            });
+                        }
+                        if (packet.doors.Count > 0)
+                        {
+                            BroadcastPacket(PacketWrapper.Create("DOORS_SYNC", "Host", packet));
+                        }
+                    }
+                }
+            }
+            // Client steering sync to Host at 20 Hz
+            else if (Role == NetworkRole.Client)
+            {
+                if (Time.time - _lastClientDroneSyncTime >= 0.05f)
+                {
+                    _lastClientDroneSyncTime = Time.time;
+                    if (DroneManager.Instance != null && DroneManager.Instance.CurrentDrone != null)
+                    {
+                        var curDrone = DroneManager.Instance.CurrentDrone;
+                        bool isSteering = Mathf.Abs(Input.GetAxisRaw("Horizontal")) > 0.05f || Mathf.Abs(Input.GetAxisRaw("Vertical")) > 0.05f;
+                        if (isSteering || Vector3.Distance(curDrone.transform.position, _lastReportedClientDronePos) > 0.01f || Mathf.Abs(curDrone.transform.eulerAngles.y - _lastReportedClientDroneRotY) > 0.5f)
+                        {
+                            _lastReportedClientDronePos = curDrone.transform.position;
+                            _lastReportedClientDroneRotY = curDrone.transform.eulerAngles.y;
+                            SendPacketToHost(PacketWrapper.Create("CLIENT_DRONE_SYNC", "Operator", new ClientDroneSyncPacket
+                            {
+                                droneNumber = curDrone.DroneNumber,
+                                x = curDrone.transform.position.x,
+                                y = curDrone.transform.position.y,
+                                z = curDrone.transform.position.z,
+                                rotY = curDrone.transform.eulerAngles.y
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
+        private void ApplyDronesSync(DronesSyncPacket packet)
+        {
+            if (packet == null || packet.drones == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
+
+            var curDrone = DroneManager.Instance.CurrentDrone;
+            bool clientSteering = curDrone != null && (Mathf.Abs(Input.GetAxisRaw("Horizontal")) > 0.05f || Mathf.Abs(Input.GetAxisRaw("Vertical")) > 0.05f);
+
+            foreach (var item in packet.drones)
+            {
+                if (item == null) continue;
+                var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == item.droneNumber);
+                if (drone != null)
+                {
+                    if (clientSteering && drone == curDrone)
+                    {
+                        continue;
+                    }
+
+                    Vector3 targetPos = new Vector3(item.x, item.y, item.z);
+                    drone.MoveToPosition(targetPos);
+                    drone.transform.rotation = Quaternion.Euler(0f, item.rotY, 0f);
+                }
+            }
+        }
+
+        private void ApplyClientDroneSync(ClientDroneSyncPacket packet)
+        {
+            if (packet == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
+
+            var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.droneNumber);
+            if (drone != null)
+            {
+                Vector3 targetPos = new Vector3(packet.x, packet.y, packet.z);
+                drone.MoveToPosition(targetPos);
+                drone.transform.rotation = Quaternion.Euler(0f, packet.rotY, 0f);
+            }
+        }
+
+        private void ApplyDoorsSync(DoorsSyncPacket packet)
+        {
+            if (packet == null || packet.doors == null || DungeonManager.Instance == null || DungeonManager.Instance.doors == null) return;
+
+            foreach (var item in packet.doors)
+            {
+                if (item == null || string.IsNullOrEmpty(item.label)) continue;
+                foreach (var door in DungeonManager.Instance.doors)
+                {
+                    if (door == null) continue;
+                    string label = !string.IsNullOrEmpty(door.LabelSimple) ? door.LabelSimple : door.Label;
+                    if (string.Equals(label, item.label, StringComparison.OrdinalIgnoreCase))
+                    {
+                        bool currentOpen = door.state == DoorState.Open || door.IsTryingToOpen;
+                        if (item.isOpen && !currentOpen)
+                        {
+                            door.open(false);
+                        }
+                        else if (!item.isOpen && currentOpen)
+                        {
+                            door.close(false);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        private void ExecuteLocalCommand(string command)
+        {
+            if (string.IsNullOrEmpty(command) || ConsoleWindow3.Instance == null) return;
+
+            Patches.ConsolePatches.IsExecutingRemoteCommand = true;
+            try
+            {
+                ConsoleWindow3.Instance.InjectCommandText(command);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DuskersCoopMod] Error executing replicated command '{command}': {ex}");
+            }
+            finally
+            {
+                Patches.ConsolePatches.IsExecutingRemoteCommand = false;
+            }
+        }
+
         public void ExecuteAuthoritativeCommand(string command)
         {
             if (ConsoleWindow3.Instance != null)
             {
+                Patches.ConsolePatches.IsExecutingRemoteCommand = true;
                 try
                 {
                     ConsoleWindow3.Instance.InjectCommandText(command);
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[DuskersCoopMod] Error executing remote command '{command}': {ex}");
+                    Debug.LogError($"[DuskersCoopMod] Error executing authoritative command '{command}': {ex}");
+                }
+                finally
+                {
+                    Patches.ConsolePatches.IsExecutingRemoteCommand = false;
                 }
             }
         }

@@ -641,10 +641,29 @@ namespace DuskersCoopMod.Patches
                     dungGroup = selDung.GroupKey ?? "";
                 }
 
+                int dungSeed = 0;
+                if (selDung != null && !string.IsNullOrEmpty(selDung.GroupKey))
+                {
+                    dungSeed = GalaxySaveFile.Get(selDung.GroupKey, "SEED_D", -1);
+                }
+                if (dungSeed <= 0)
+                {
+                    dungSeed = UnityEngine.Random.Range(100000, 999999);
+                    if (selDung != null && !string.IsNullOrEmpty(selDung.GroupKey))
+                    {
+                        GalaxySaveFile.Save(selDung.GroupKey, "SEED_D", dungSeed);
+                    }
+                }
+
+                DungeonPatches.SynchronizedDungeonSeed = dungSeed;
+                UnityEngine.Random.seed = dungSeed;
+
                 net.BroadcastPacket(PacketWrapper.Create("STRATEGIC_ACTION", "Host", new StrategicActionData
                 {
                     action = "BOARD_DUNGEON",
-                    targetName = !string.IsNullOrEmpty(dungGroup) ? $"{dungName}|{dungGroup}" : dungName
+                    targetName = dungName,
+                    dungeonGroup = dungGroup,
+                    dungeonSeed = dungSeed
                 }));
             }
 

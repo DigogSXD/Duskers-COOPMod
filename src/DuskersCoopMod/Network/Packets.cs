@@ -84,6 +84,8 @@ namespace DuskersCoopMod.Network
     {
         public string action;
         public string targetName;
+        public string dungeonGroup;
+        public int dungeonSeed;
     }
 
     [Serializable]
@@ -98,5 +100,46 @@ namespace DuskersCoopMod.Network
         public int propulsionFuel;
         public int jumpFuel;
         public int mapState;
+    }
+
+    [Serializable]
+    public class DroneSyncItem
+    {
+        public int droneNumber;
+        public float x;
+        public float y;
+        public float z;
+        public float rotY;
+        public float hp;
+        public bool isDead;
+    }
+
+    [Serializable]
+    public class DronesSyncPacket
+    {
+        public System.Collections.Generic.List<DroneSyncItem> drones = new System.Collections.Generic.List<DroneSyncItem>();
+    }
+
+    [Serializable]
+    public class ClientDroneSyncPacket
+    {
+        public int droneNumber;
+        public float x;
+        public float y;
+        public float z;
+        public float rotY;
+    }
+
+    [Serializable]
+    public class DoorSyncItem
+    {
+        public string label;
+        public bool isOpen;
+    }
+
+    [Serializable]
+    public class DoorsSyncPacket
+    {
+        public System.Collections.Generic.List<DoorSyncItem> doors = new System.Collections.Generic.List<DoorSyncItem>();
     }
 }

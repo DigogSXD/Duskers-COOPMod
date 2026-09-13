@@ -33,10 +33,18 @@ namespace DuskersCoopMod.Patches
             catch { }
         }
 
+        private static string _lastExecutedHostCommand = null;
+        public static bool IsExecutingRemoteCommand = false;
+
         [HarmonyPrefix]
         [HarmonyPatch("AttemptExecuteCommand")]
         public static bool AttemptExecuteCommand_Prefix(ConsoleWindow3 __instance)
         {
+            if (IsExecutingRemoteCommand)
+            {
+                return true;
+            }
+
             var traverse = Traverse.Create(__instance);
             string commandText = traverse.Field("_commandText").GetValue<string>();
 
@@ -57,10 +65,11 @@ namespace DuskersCoopMod.Patches
                 return false;
             }
 
-            // If we are connected as CLIENT, forward command to HOST and don't execute locally
-            if (CoopNetworkManager.Instance != null &&
-                CoopNetworkManager.Instance.Role == NetworkRole.Client &&
-                CoopNetworkManager.Instance.IsConnected)
+            var net = CoopNetworkManager.Instance;
+
+            // If we are connected as CLIENT, forward command to HOST and don't execute locally yet
+            // Host will execute and broadcast EXECUTE_COMMAND so all operators execute in sync
+            if (net != null && net.Role == NetworkRole.Client && net.IsConnected)
             {
                 // Echo on client console
                 traverse.Method("AddTextToConsole", new object[] { new ConsoleMessage("[YOU] > " + trimmed, ConsoleMessageType.Info) }).GetValue();
@@ -68,12 +77,30 @@ namespace DuskersCoopMod.Patches
                 traverse.Method("RefreshCurrentLine").GetValue();
 
                 // Send to Host
-                CoopNetworkManager.Instance.SendCommand(trimmed);
+                net.SendCommand(trimmed);
                 return false;
             }
 
-            // If we are HOST, allow normal execution; Host will broadcast console output to all connected clients
+            // If we are HOST, record command so Postfix can broadcast to clients
+            if (net != null && net.Role == NetworkRole.Host && net.ConnectedCount > 0)
+            {
+                _lastExecutedHostCommand = trimmed;
+            }
+
             return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch("AttemptExecuteCommand")]
+        public static void AttemptExecuteCommand_Postfix()
+        {
+            if (IsExecutingRemoteCommand) return;
+            var net = CoopNetworkManager.Instance;
+            if (net != null && net.Role == NetworkRole.Host && net.ConnectedCount > 0 && !string.IsNullOrEmpty(_lastExecutedHostCommand))
+            {
+                net.BroadcastPacket(PacketWrapper.Create("EXECUTE_COMMAND", "Host", new CommandData { command = _lastExecutedHostCommand }));
+                _lastExecutedHostCommand = null;
+            }
         }
 
         [HarmonyPostfix]
