@@ -144,6 +144,9 @@ namespace DuskersCoopMod.Save
             if (state.galaxyInternalId != 0 && currentGalaxyId != state.galaxyInternalId)
             {
                 Debug.Log($"[DuskersCoopMod] Client galaxy ({currentGalaxyId}) differs from Host ({state.galaxyInternalId}). Reloading UniverseSceneProcessor to align galaxy!");
+                TargetGalaxyId = state.galaxyInternalId;
+                HasTargetGalaxyState = true;
+                try { UniverseSaveFile.Save<int>("CUR_GLXY", state.galaxyInternalId); } catch { }
                 GalaxyProcessor.universeMapManager = null;
                 GalaxyMapManager.PreserveData = true;
                 UnityEngine.Application.LoadLevel("UniverseSceneProcessor");

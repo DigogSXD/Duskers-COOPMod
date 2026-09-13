@@ -1108,8 +1108,18 @@ namespace DuskersCoopMod.Network
             }
         }
 
+        public static bool IsWindowFocused = true;
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            IsWindowFocused = hasFocus;
+        }
+
         public static bool IsSteeringInputActive()
         {
+            if (!IsWindowFocused)
+                return false;
+
             if (ConsoleWindow3.Instance != null && ConsoleWindow3.Instance.CommandBeingEntered)
                 return false;
 
@@ -1235,8 +1245,8 @@ namespace DuskersCoopMod.Network
         {
             if (packet == null || packet.drones == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
 
-            bool isCurrentlySteering = IsSteeringInputActive();
-            int currentSteeringDrone = (isCurrentlySteering && DroneManager.Instance.CurrentDrone != null) ? DroneManager.Instance.CurrentDrone.DroneNumber : -1;
+            // Only skip local override if the client has window focus AND actively steered this specific drone in the last 150ms!
+            bool isClientLocallySteering = IsWindowFocused && (Time.time - _lastClientSteeringTime < 0.15f);
 
             foreach (var item in packet.drones)
             {
@@ -1244,17 +1254,24 @@ namespace DuskersCoopMod.Network
                 var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == item.droneNumber);
                 if (drone != null)
                 {
-                    // Do NOT overwrite locally steered drone while the local player is actively pressing movement keys on it
-                    if (drone.DroneNumber == currentSteeringDrone)
+                    if (isClientLocallySteering && drone.DroneNumber == _lastClientSteeringDrone)
                     {
                         continue;
                     }
 
                     Vector3 targetPos = new Vector3(item.x, item.y, 0f);
                     drone.MoveToPosition(targetPos);
-                    float targetRotZ = (item.rotZ != 0f) ? item.rotZ : item.rotY;
-                    drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
-                    Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
+                    drone.LastPosition = targetPos;
+                    if (drone.transform != null)
+                    {
+                        float targetRotZ = (item.rotZ != 0f) ? item.rotZ : item.rotY;
+                        drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
+                        Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
+                    }
+                    if (drone.droneUIObject != null)
+                    {
+                        drone.droneUIObject.RefreshInfoLabelPos();
+                    }
                     try
                     {
                         DroneManager.Instance?.CalcDroneCurrentRoom(drone);
@@ -1273,14 +1290,22 @@ namespace DuskersCoopMod.Network
             if (drone != null)
             {
                 // If Host is NOT actively steering this exact drone, accept client's position!
-                bool hostSteeringThisDrone = (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
+                bool hostSteeringThisDrone = IsWindowFocused && (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
                 if (!hostSteeringThisDrone)
                 {
                     Vector3 targetPos = new Vector3(packet.x, packet.y, 0f);
                     drone.MoveToPosition(targetPos);
-                    float targetRotZ = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY;
-                    drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
-                    Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
+                    drone.LastPosition = targetPos;
+                    if (drone.transform != null)
+                    {
+                        float targetRotZ = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY;
+                        drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
+                        Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
+                    }
+                    if (drone.droneUIObject != null)
+                    {
+                        drone.droneUIObject.RefreshInfoLabelPos();
+                    }
                     try
                     {
                         DroneManager.Instance?.CalcDroneCurrentRoom(drone);

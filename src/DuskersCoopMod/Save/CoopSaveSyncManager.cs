@@ -42,16 +42,19 @@ namespace DuskersCoopMod.Save
                     });
                 }
 
-                // Add data folder recursively
+                // Add data folder recursively (skip huge PNG cache textures, keep all .txt, .bkd, .xml)
                 string dataDir = Path.Combine(sourceDir, "data");
                 if (Directory.Exists(dataDir))
                 {
                     string[] allFiles = Directory.GetFiles(dataDir, "*.*", SearchOption.AllDirectories);
                     foreach (string filePath in allFiles)
                     {
+                        string ext = Path.GetExtension(filePath).ToLower();
+                        if (ext != ".txt" && ext != ".bkd" && ext != ".xml") continue;
+
                         string relative = filePath.Substring(sourceDir.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                         FileInfo fi = new FileInfo(filePath);
-                        if (fi.Length > 500000) continue; // skip files > 500KB
+                        if (fi.Length > 200000) continue; // skip files > 200KB
 
                         package.items.Add(new SaveFileItem
                         {
@@ -80,13 +83,14 @@ namespace DuskersCoopMod.Save
                 string json = Encoding.UTF8.GetString(rawBytes);
 
                 SavePackageData package = JsonUtility.FromJson<SavePackageData>(json);
-                if (package == null || package.items == null) return false;
+                if (package == null || package.items == null || package.items.Count == 0) return false;
 
                 string targetDir = SaveSlotManager.GetCoopSlotPath();
-                if (!Directory.Exists(targetDir))
+                if (Directory.Exists(targetDir))
                 {
-                    Directory.CreateDirectory(targetDir);
+                    try { Directory.Delete(targetDir, true); } catch { }
                 }
+                Directory.CreateDirectory(targetDir);
 
                 foreach (var item in package.items)
                 {
@@ -116,6 +120,8 @@ namespace DuskersCoopMod.Save
                     int curGlxy = UniverseSaveFile.Get<int>("CUR_GLXY", 0);
                     if (curGlxy != 0)
                     {
+                        CoopGalaxySyncManager.TargetGalaxyId = curGlxy;
+                        CoopGalaxySyncManager.HasTargetGalaxyState = true;
                         GalaxySaveFile.InitSetting(curGlxy);
                     }
                     else
@@ -132,7 +138,7 @@ namespace DuskersCoopMod.Save
                 GalaxyProcessor.universeMapManager = null;
                 GalaxyMapManager.PreserveData = true;
 
-                Debug.Log("[DuskersCoopMod] Successfully applied Host's synchronized save to SlotCoop!");
+                Debug.Log($"[DuskersCoopMod] Successfully applied Host's synchronized save ({package.items.Count} files) to SlotCoop!");
                 return true;
             }
             catch (Exception ex)
