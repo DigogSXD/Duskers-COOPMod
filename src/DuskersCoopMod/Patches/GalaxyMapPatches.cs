@@ -202,6 +202,7 @@ namespace DuskersCoopMod.Patches
             _isEnsuring = true;
             try
             {
+                GalaxyMapPatches.RepairNurseryKeys();
                 if (starSystemInfo.Dungeons == null)
                 {
                     starSystemInfo.Dungeons = new System.Collections.Generic.List<DungeonInfo>();
@@ -386,12 +387,80 @@ namespace DuskersCoopMod.Patches
             }
         }
 
+        public static void RepairNurseryKeys()
+        {
+            try
+            {
+                var uniGroups = UniverseSaveFile.GetAllGroups("OBJN_");
+                if (uniGroups != null)
+                {
+                    int fallbackIdx = 0;
+                    foreach (var g in uniGroups)
+                    {
+                        if (string.IsNullOrEmpty(g)) continue;
+                        int idx = UniverseSaveFile.Get<int>(g, "EPIDX", -1);
+                        if (idx < 0 || idx >= 4)
+                        {
+                            int safeIdx = fallbackIdx % 4;
+                            UniverseSaveFile.Save<int>(g, "EPIDX", safeIdx);
+                            Debug.LogWarning($"[DuskersCoopMod] Repaired invalid earlyPlayIdx in UniverseSaveFile ({idx} -> {safeIdx}) for {g}");
+                            fallbackIdx++;
+                        }
+
+                        string dest = g.Replace("OBJN_", "OBJ_");
+                        UniverseSaveFile.Save<int>(dest, "EPIDX", (fallbackIdx > 0 ? fallbackIdx - 1 : 0) % 4);
+                        GalaxySaveFile.Save<int>(dest, "EPIDX", (fallbackIdx > 0 ? fallbackIdx - 1 : 0) % 4);
+                    }
+                }
+
+                var galNursery = GalaxySaveFile.GetAllGroups("OBJN_");
+                if (galNursery != null)
+                {
+                    int fallbackIdx = 0;
+                    foreach (var g in galNursery)
+                    {
+                        if (string.IsNullOrEmpty(g)) continue;
+                        int idx = GalaxySaveFile.Get<int>(g, "EPIDX", -1);
+                        if (idx < 0 || idx >= 4)
+                        {
+                            int safeIdx = fallbackIdx % 4;
+                            GalaxySaveFile.Save<int>(g, "EPIDX", safeIdx);
+                            Debug.LogWarning($"[DuskersCoopMod] Repaired invalid earlyPlayIdx in GalaxySaveFile ({idx} -> {safeIdx}) for {g}");
+                            fallbackIdx++;
+                        }
+                    }
+                }
+
+                var galObj = GalaxySaveFile.GetAllGroups("OBJ_");
+                if (galObj != null)
+                {
+                    int fallbackIdx = 0;
+                    foreach (var g in galObj)
+                    {
+                        if (string.IsNullOrEmpty(g)) continue;
+                        int idx = GalaxySaveFile.Get<int>(g, "EPIDX", -1);
+                        if (idx < 0 || idx >= 4)
+                        {
+                            int safeIdx = fallbackIdx % 4;
+                            GalaxySaveFile.Save<int>(g, "EPIDX", safeIdx);
+                            fallbackIdx++;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Error in RepairNurseryKeys: {ex}");
+            }
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch("DoAwake")]
         public static void DoAwake_Prefix()
         {
             try
             {
+                RepairNurseryKeys();
                 var p = GlobalSettings.GameState != null ? GlobalSettings.GameState.ThePlayer : null;
                 if (p != null && p.CurrentStarSystem != null)
                 {
@@ -437,6 +506,20 @@ namespace DuskersCoopMod.Patches
                 Debug.LogWarning($"[DuskersCoopMod] Suppressed exception in GalaxyMapManager.Start: {__exception}");
                 return null;
             }
+            return null;
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch("UpdateAllDungeonVisualDistanceIndications", new Type[] { typeof(StarSystemInfo) })]
+        public static Exception UpdateAllDungeonVisualDistanceIndications_Finalizer(Exception __exception)
+        {
+            return null;
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch("UpdateAllDungeonVisualDistanceIndications", new Type[] { })]
+        public static Exception UpdateAllDungeonVisualDistanceIndications_Empty_Finalizer(Exception __exception)
+        {
             return null;
         }
 
@@ -872,6 +955,27 @@ namespace DuskersCoopMod.Patches
         public static Exception Update_Finalizer(Exception __exception)
         {
             // Suppress NRE during scene transitions / mission exit when CurrentDrone or dronesList is torn down
+            return null;
+        }
+    }
+
+    [HarmonyPatch(typeof(GalaxyProcessor), "GenerateNurseryDungeonsFromData")]
+    public static class GalaxyProcessor_GenerateNurseryDungeonsFromData_Patch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(StarSystemInfo starSystemInfo)
+        {
+            GalaxyMapPatches.RepairNurseryKeys();
+        }
+
+        [HarmonyFinalizer]
+        public static Exception Finalizer(Exception __exception, StarSystemInfo starSystemInfo)
+        {
+            if (__exception != null)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Handled exception in GenerateNurseryDungeonsFromData: {__exception.Message}");
+                GalaxyProcessorPatches.EnsureSystemHasDungeons(starSystemInfo);
+            }
             return null;
         }
     }
