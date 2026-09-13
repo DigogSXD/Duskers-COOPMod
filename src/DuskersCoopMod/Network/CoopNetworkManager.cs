@@ -62,11 +62,9 @@ namespace DuskersCoopMod.Network
         {
             get
             {
-                if (SteamCoopManager.Instance != null && (SteamCoopManager.Instance.IsSteamHost || SteamCoopManager.Instance.IsSteamClient))
-                {
-                    return SteamCoopManager.Instance.SteamConnectedCount > 0 || SteamCoopManager.Instance.IsSteamClient;
-                }
-                return Role == NetworkRole.Host ? _clients.Count > 0 : _isConnected;
+                if (ConnectedCount > 0) return true;
+                if (SteamCoopManager.Instance != null && SteamCoopManager.Instance.IsSteamClient) return true;
+                return _isConnected;
             }
         }
 
@@ -74,11 +72,9 @@ namespace DuskersCoopMod.Network
         {
             get
             {
-                if (SteamCoopManager.Instance != null && (SteamCoopManager.Instance.IsSteamHost || SteamCoopManager.Instance.IsSteamClient))
-                {
-                    return SteamCoopManager.Instance.SteamConnectedCount;
-                }
-                return Role == NetworkRole.Host ? _clients.Count : (_isConnected ? 1 : 0);
+                int tcpCount = Role == NetworkRole.Host ? _clients.Count : (_isConnected ? 1 : 0);
+                int steamCount = (SteamCoopManager.Instance != null) ? SteamCoopManager.Instance.SteamConnectedCount : 0;
+                return tcpCount + steamCount;
             }
         }
         public string RemoteEndpointInfo => _remoteInfo;
@@ -313,15 +309,19 @@ namespace DuskersCoopMod.Network
 
         public List<string> GetConnectedOperatorsList()
         {
+            List<string> list = new List<string>();
             if (SteamCoopManager.Instance != null && (SteamCoopManager.Instance.IsSteamHost || SteamCoopManager.Instance.IsSteamClient))
             {
-                return SteamCoopManager.Instance.GetSteamOperatorsList();
+                var sList = SteamCoopManager.Instance.GetSteamOperatorsList();
+                if (sList != null) list.AddRange(sList);
             }
 
-            List<string> list = new List<string>();
             if (Role == NetworkRole.Host)
             {
-                list.Add($"Operator 1 (Host - You) [v{MOD_VERSION}]");
+                if (list.Count == 0)
+                {
+                    list.Add($"Operator 1 (Host - You) [v{MOD_VERSION}]");
+                }
                 lock (_clientsLock)
                 {
                     foreach (var c in _clients)
@@ -330,17 +330,24 @@ namespace DuskersCoopMod.Network
                         {
                             bool mismatch = !string.Equals(c.Version, MOD_VERSION, StringComparison.OrdinalIgnoreCase);
                             string status = mismatch ? $" [v{c.Version} - INCOMPATIBLE!]" : $" [v{c.Version}]";
-                            list.Add($" - {c.Name} [{c.RemoteInfo}]{status}");
+                            string entry = $" - {c.Name} [{c.RemoteInfo}]{status}";
+                            if (!list.Contains(entry))
+                            {
+                                list.Add(entry);
+                            }
                         }
                     }
                 }
             }
             else if (Role == NetworkRole.Client && _isConnected)
             {
-                string hVer = !string.IsNullOrEmpty(_hostVersion) ? _hostVersion : "Unknown";
-                bool mismatch = !string.Equals(hVer, MOD_VERSION, StringComparison.OrdinalIgnoreCase);
-                string note = mismatch ? " [INCOMPATIBLE VERSION!]" : "";
-                list.Add($"Connected to Host [{_remoteInfo}] (Host: v{hVer}, You: v{MOD_VERSION}){note}");
+                if (list.Count == 0)
+                {
+                    string hVer = !string.IsNullOrEmpty(_hostVersion) ? _hostVersion : "Unknown";
+                    bool mismatch = !string.Equals(hVer, MOD_VERSION, StringComparison.OrdinalIgnoreCase);
+                    string note = mismatch ? " [INCOMPATIBLE VERSION!]" : "";
+                    list.Add($"Connected to Host [{_remoteInfo}] (Host: v{hVer}, You: v{MOD_VERSION}){note}");
+                }
             }
             return list;
         }
@@ -468,6 +475,14 @@ namespace DuskersCoopMod.Network
                         client.Send(PacketWrapper.Create("SAVE_SYNC", "Host", new SaveSyncData
                         {
                             compressedBase64 = saveBase64
+                        }));
+                    }
+
+                    if (GalaxyMapManager.Instance != null || DungeonManager.Instance != null)
+                    {
+                        client.Send(PacketWrapper.Create("STRATEGIC_ACTION", "Host", new StrategicActionData
+                        {
+                            action = "LAUNCH_GAME"
                         }));
                     }
 
@@ -807,21 +822,18 @@ namespace DuskersCoopMod.Network
                         GlobalSettings.IsTutorial = false;
                         GlobalSettings.FirstTimeIn = true;
                         GalaxyMapManager.PreserveData = true;
+                        GalaxyProcessor.universeMapManager = null;
 
-                        if (MainMenu.Instance != null)
+                        try
                         {
-                            try
+                            if (MenuPanelUI.Instance != null)
                             {
-                                MainMenu.LaunchGameFinal();
-                                return;
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.LogWarning($"[DuskersCoopMod] MainMenu.LaunchGameFinal threw ({ex.Message}), falling back to direct scene load.");
+                                MenuPanelUI.Instance.Clear();
+                                MenuPanelUI.Instance.Reset();
                             }
                         }
+                        catch { }
 
-                        // Direct scene load fallback (guaranteed to launch regardless of UI menu stack state)
                         UnityEngine.Resources.UnloadUnusedAssets();
                         UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
                     }

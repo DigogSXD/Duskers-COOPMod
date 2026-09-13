@@ -219,16 +219,23 @@ namespace DuskersCoopMod.UI
                     }));
                 }
 
-                if (MainMenu.Instance != null)
+                GalaxyProcessor.universeMapManager = null;
+                GalaxyMapManager.PreserveData = true;
+                GlobalSettings.IsTutorial = false;
+                GlobalSettings.FirstTimeIn = true;
+
+                try
                 {
-                    MethodInfo playMethod = AccessTools.Method(typeof(MainMenu), "MenuPlayGame", new Type[] { typeof(DuskersMenuItem) });
-                    if (playMethod != null)
+                    if (MenuPanelUI.Instance != null)
                     {
-                        playMethod.Invoke(MainMenu.Instance, new object[] { null });
-                        return;
+                        MenuPanelUI.Instance.Clear();
+                        MenuPanelUI.Instance.Reset();
                     }
                 }
-                Debug.LogError("[DuskersCoopMod] Could not find MenuPlayGame method on MainMenu");
+                catch { }
+
+                UnityEngine.Resources.UnloadUnusedAssets();
+                UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
             }
             catch (Exception ex)
             {

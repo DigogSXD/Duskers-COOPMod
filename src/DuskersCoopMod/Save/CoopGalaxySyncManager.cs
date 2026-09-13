@@ -114,36 +114,20 @@ namespace DuskersCoopMod.Save
                 GlobalSettings.IsTutorial = false;
                 GlobalSettings.FirstTimeIn = true;
 
-                bool launched = false;
-                if (MainMenu.Instance != null)
+                try
                 {
-                    try
+                    Debug.Log("[DuskersCoopMod] Client received Host Galaxy State in MainMenu. Launching game directly into space!");
+                    if (MenuPanelUI.Instance != null)
                     {
-                        Debug.Log("[DuskersCoopMod] Client received Host Galaxy State in MainMenu. Launching game directly into space!");
-                        MainMenu.LaunchGameFinal();
-                        launched = true;
+                        MenuPanelUI.Instance.Clear();
+                        MenuPanelUI.Instance.Reset();
                     }
-                    catch (Exception ex)
-                    {
-                        Debug.LogWarning($"[DuskersCoopMod] MainMenu.LaunchGameFinal threw ({ex.Message}), falling back to direct scene load.");
-                    }
+                    UnityEngine.Resources.UnloadUnusedAssets();
+                    UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
                 }
-
-                if (!launched)
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        if (MenuPanelUI.Instance != null)
-                        {
-                            try { Traverse.Create(MenuPanelUI.Instance).Method("CloseMenu")?.GetValue(); } catch { }
-                        }
-                        UnityEngine.Resources.UnloadUnusedAssets();
-                        UnityEngine.Application.LoadLevel("UniverseSceneProcessor");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[DuskersCoopMod] Error in direct scene load: {ex}");
-                    }
+                    Debug.LogError($"[DuskersCoopMod] Error in direct scene load: {ex}");
                 }
                 return;
             }
