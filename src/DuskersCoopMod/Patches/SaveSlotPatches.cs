@@ -77,12 +77,12 @@ namespace DuskersCoopMod.Patches
 
         [HarmonyPrefix]
         [HarmonyPatch("LoadSettingFile", new Type[] { typeof(string) })]
-        public static void LoadSettingFile_Prefix(SettingsFile __instance, ref string filename)
+        public static void LoadSettingFile_Prefix(SettingsFile __instance, ref string gameSaveFilename)
         {
-            string redirected = SaveSlotPatches.RedirectToCoopSlotIfNeeded(filename);
-            if (redirected != filename)
+            string redirected = SaveSlotPatches.RedirectToCoopSlotIfNeeded(gameSaveFilename);
+            if (redirected != gameSaveFilename)
             {
-                filename = redirected;
+                gameSaveFilename = redirected;
                 try
                 {
                     var field = typeof(SettingsFile).GetField("sourceFile", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
