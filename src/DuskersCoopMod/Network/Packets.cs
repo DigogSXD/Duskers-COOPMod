@@ -109,6 +109,7 @@ namespace DuskersCoopMod.Network
         public float x;
         public float y;
         public float z;
+        public float rotZ;
         public float rotY;
         public float hp;
         public bool isDead;
@@ -127,6 +128,7 @@ namespace DuskersCoopMod.Network
         public float x;
         public float y;
         public float z;
+        public float rotZ;
         public float rotY;
     }
 

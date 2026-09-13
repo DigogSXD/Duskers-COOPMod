@@ -1098,6 +1098,9 @@ namespace DuskersCoopMod.Network
 
         public static bool IsSteeringInputActive()
         {
+            if (ConsoleWindow3.Instance != null && ConsoleWindow3.Instance.CommandBeingEntered)
+                return false;
+
             try
             {
                 if (Input.GetButton("Up") || Input.GetButton("Down") || Input.GetButton("Left") || Input.GetButton("Right"))
@@ -1130,13 +1133,15 @@ namespace DuskersCoopMod.Network
                             if (d == null) continue;
                             Vector3 pos = d.GetDronePosition();
                             Quaternion rot = d.GetDroneRotation();
+                            float rotZ = rot.eulerAngles.z;
                             packet.drones.Add(new DroneSyncItem
                             {
                                 droneNumber = d.DroneNumber,
                                 x = pos.x,
                                 y = pos.y,
                                 z = pos.z,
-                                rotY = rot.eulerAngles.y,
+                                rotZ = rotZ,
+                                rotY = rotZ,
                                 hp = d.CurrentHitPoints,
                                 isDead = d.IsDead
                             });
@@ -1192,20 +1197,21 @@ namespace DuskersCoopMod.Network
                     {
                         _lastClientDroneSyncTime = Time.time;
                         Vector3 curPos = curDrone.GetDronePosition();
-                        float curRotY = curDrone.GetDroneRotation().eulerAngles.y;
+                        float curRotZ = curDrone.GetDroneRotation().eulerAngles.z;
 
-                        bool hasMoved = Vector3.Distance(curPos, _lastReportedClientDronePos) > 0.005f || Mathf.Abs(curRotY - _lastReportedClientDroneRotY) > 0.2f;
+                        bool hasMoved = Vector3.Distance(curPos, _lastReportedClientDronePos) > 0.005f || Mathf.Abs(curRotZ - _lastReportedClientDroneRotY) > 0.2f;
                         if (isSteering || hasMoved)
                         {
                             _lastReportedClientDronePos = curPos;
-                            _lastReportedClientDroneRotY = curRotY;
+                            _lastReportedClientDroneRotY = curRotZ;
                             SendPacketToHost(PacketWrapper.Create("CLIENT_DRONE_SYNC", "Operator", new ClientDroneSyncPacket
                             {
                                 droneNumber = curDrone.DroneNumber,
                                 x = curPos.x,
                                 y = curPos.y,
                                 z = curPos.z,
-                                rotY = curRotY
+                                rotZ = curRotZ,
+                                rotY = curRotZ
                             }));
                         }
                     }
@@ -1217,7 +1223,8 @@ namespace DuskersCoopMod.Network
         {
             if (packet == null || packet.drones == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
 
-            bool isActivelySteering = (Time.time - _lastClientSteeringTime < 0.4f);
+            bool isCurrentlySteering = IsSteeringInputActive();
+            int currentSteeringDrone = (isCurrentlySteering && DroneManager.Instance.CurrentDrone != null) ? DroneManager.Instance.CurrentDrone.DroneNumber : -1;
 
             foreach (var item in packet.drones)
             {
@@ -1225,15 +1232,17 @@ namespace DuskersCoopMod.Network
                 var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == item.droneNumber);
                 if (drone != null)
                 {
-                    // Do NOT overwrite locally steered drone with host's delayed echo!
-                    if (isActivelySteering && drone.DroneNumber == _lastClientSteeringDrone)
+                    // Do NOT overwrite locally steered drone while the local player is actively pressing movement keys on it
+                    if (drone.DroneNumber == currentSteeringDrone)
                     {
                         continue;
                     }
 
-                    Vector3 targetPos = new Vector3(item.x, item.y, item.z);
+                    Vector3 targetPos = new Vector3(item.x, item.y, 0f);
                     drone.MoveToPosition(targetPos);
-                    drone.SetRotation(Quaternion.Euler(0f, item.rotY, 0f));
+                    float targetRotZ = (item.rotZ != 0f) ? item.rotZ : item.rotY;
+                    drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
+                    Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
                     try
                     {
                         DroneManager.Instance?.CalcDroneCurrentRoom(drone);
@@ -1255,9 +1264,11 @@ namespace DuskersCoopMod.Network
                 bool hostSteeringThisDrone = (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
                 if (!hostSteeringThisDrone)
                 {
-                    Vector3 targetPos = new Vector3(packet.x, packet.y, packet.z);
+                    Vector3 targetPos = new Vector3(packet.x, packet.y, 0f);
                     drone.MoveToPosition(targetPos);
-                    drone.SetRotation(Quaternion.Euler(0f, packet.rotY, 0f));
+                    float targetRotZ = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY;
+                    drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
+                    Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
                     try
                     {
                         DroneManager.Instance?.CalcDroneCurrentRoom(drone);
@@ -1281,14 +1292,23 @@ namespace DuskersCoopMod.Network
                     string label = !string.IsNullOrEmpty(door.LabelSimple) ? door.LabelSimple : door.Label;
                     if (string.Equals(label, item.label, StringComparison.OrdinalIgnoreCase))
                     {
-                        bool currentOpen = door.state == DoorState.Open || door.IsTryingToOpen;
-                        if (item.isOpen && !currentOpen)
+                        bool currentOpen = (door.state == DoorState.Open || door.IsTryingToOpen);
+                        if (item.isOpen && (!currentOpen || door.state != DoorState.Open))
                         {
-                            door.open(false);
+                            door.open(false, false);
+                            door.state = DoorState.Open;
                         }
-                        else if (!item.isOpen && currentOpen)
+                        else if (!item.isOpen && (currentOpen || door.state != DoorState.Closed))
                         {
-                            door.close(false);
+                            try
+                            {
+                                Traverse.Create(door).Method("CloseDoor")?.GetValue();
+                            }
+                            catch
+                            {
+                                door.close(false);
+                            }
+                            door.state = DoorState.Closed;
                         }
                         break;
                     }

@@ -220,6 +220,16 @@ namespace DuskersCoopMod.Patches
                     }
                 }
 
+                // Repair any dungeons with Unknown type so GalaxyMapManager won't crash
+                foreach (var dung in starSystemInfo.Dungeons)
+                {
+                    if (dung != null && (dung.DungeonType == DungeonTypeEnum.Unknown || (int)dung.DungeonType == 0))
+                    {
+                        dung.DungeonType = DungeonTypeEnum.Derelict;
+                        Debug.LogWarning($"[DuskersCoopMod] Repaired Unknown dungeon type to Derelict for {dung.Name} in {starSystemInfo.Name}");
+                    }
+                }
+
                 if (starSystemInfo.Dungeons.Count > 0)
                 {
                     if (!starSystemInfo.Dungeons.Exists(d => d != null && !d.HaveVisited))
@@ -837,6 +847,32 @@ namespace DuskersCoopMod.Patches
                 CoopSaveSyncManager.SyncToAllClients();
                 CoopGalaxySyncManager.BroadcastGalaxyState();
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(GalaxyMapManager), "SetSelectedDungeon", new Type[] { typeof(DungeonInfo), typeof(bool) })]
+    public static class GalaxyMapManager_SetSelectedDungeon_Patch
+    {
+        [HarmonyFinalizer]
+        public static Exception Finalizer(Exception __exception)
+        {
+            if (__exception != null)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Handled exception in GalaxyMapManager.SetSelectedDungeon: {__exception.Message}");
+            }
+            return null;
+        }
+    }
+
+    [HarmonyPatch(typeof(DroneManager))]
+    public static class DroneManagerPatches
+    {
+        [HarmonyFinalizer]
+        [HarmonyPatch("Update")]
+        public static Exception Update_Finalizer(Exception __exception)
+        {
+            // Suppress NRE during scene transitions / mission exit when CurrentDrone or dronesList is torn down
+            return null;
         }
     }
 }
