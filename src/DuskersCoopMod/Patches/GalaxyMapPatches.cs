@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using System.Reflection.Emit;
 using DuskersCoopMod.Network;
 using DuskersCoopMod.Save;
 using HarmonyLib;
@@ -975,6 +977,61 @@ namespace DuskersCoopMod.Patches
             {
                 Debug.LogWarning($"[DuskersCoopMod] Handled exception in GenerateNurseryDungeonsFromData: {__exception.Message}");
                 GalaxyProcessorPatches.EnsureSystemHasDungeons(starSystemInfo);
+            }
+            return null;
+        }
+    }
+
+    [HarmonyPatch(typeof(UniverseProcessor), "Update")]
+    public static class UniverseProcessorPatches
+    {
+        public static void SafeDictionaryAdd(Dictionary<string, KeyValuePair<string, string>> dict, string key, KeyValuePair<string, string> value)
+        {
+            if (dict == null || string.IsNullOrEmpty(key)) return;
+            if (!dict.ContainsKey(key))
+            {
+                dict.Add(key, value);
+            }
+            else
+            {
+                // Multi-galaxy duplicate key collision guard: make key unique to prevent crash and preserve entry
+                string uniqueKey = $"{key}_{value.Value}";
+                if (!dict.ContainsKey(uniqueKey))
+                {
+                    dict.Add(uniqueKey, value);
+                }
+                else
+                {
+                    dict[key] = value;
+                }
+            }
+        }
+
+        [HarmonyTranspiler]
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            var targetMethod = AccessTools.Method(typeof(Dictionary<string, KeyValuePair<string, string>>), "Add");
+            var replacementMethod = AccessTools.Method(typeof(UniverseProcessorPatches), nameof(SafeDictionaryAdd));
+
+            foreach (var code in instructions)
+            {
+                if ((code.opcode == OpCodes.Callvirt || code.opcode == OpCodes.Call) && code.operand is MethodInfo mi && mi == targetMethod)
+                {
+                    yield return new CodeInstruction(OpCodes.Call, replacementMethod);
+                }
+                else
+                {
+                    yield return code;
+                }
+            }
+        }
+
+        [HarmonyFinalizer]
+        public static Exception Finalizer(Exception __exception)
+        {
+            if (__exception != null)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Handled exception in UniverseProcessor.Update: {__exception.Message}");
             }
             return null;
         }
