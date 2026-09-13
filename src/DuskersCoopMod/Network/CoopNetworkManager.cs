@@ -19,6 +19,7 @@ namespace DuskersCoopMod.Network
         public StreamReader Reader;
         public StreamWriter Writer;
         public string RemoteInfo;
+        public string Version = "Unknown";
         public volatile bool IsActive;
 
         public void Send(string line)
@@ -83,7 +84,10 @@ namespace DuskersCoopMod.Network
         public string RemoteEndpointInfo => _remoteInfo;
 
         public const int DEFAULT_PORT = 7777;
-        public const string MOD_VERSION = "1.1.3";
+        public const string MOD_VERSION = "1.1.4";
+
+        public string HostVersion => _hostVersion;
+        private string _hostVersion = "";
 
         public int CurrentPort { get; private set; } = DEFAULT_PORT;
 
@@ -312,21 +316,26 @@ namespace DuskersCoopMod.Network
             List<string> list = new List<string>();
             if (Role == NetworkRole.Host)
             {
-                list.Add("Operator 1 (Host - You)");
+                list.Add($"Operator 1 (Host - You) [v{MOD_VERSION}]");
                 lock (_clientsLock)
                 {
                     foreach (var c in _clients)
                     {
                         if (c.IsActive)
                         {
-                            list.Add($"{c.Name} [{c.RemoteInfo}]");
+                            bool mismatch = !string.Equals(c.Version, MOD_VERSION, StringComparison.OrdinalIgnoreCase);
+                            string status = mismatch ? $" [v{c.Version} - INCOMPATIBLE!]" : $" [v{c.Version}]";
+                            list.Add($" - {c.Name} [{c.RemoteInfo}]{status}");
                         }
                     }
                 }
             }
             else if (Role == NetworkRole.Client && _isConnected)
             {
-                list.Add($"Connected to Host [{_remoteInfo}]");
+                string hVer = !string.IsNullOrEmpty(_hostVersion) ? _hostVersion : "Unknown";
+                bool mismatch = !string.Equals(hVer, MOD_VERSION, StringComparison.OrdinalIgnoreCase);
+                string note = mismatch ? " [INCOMPATIBLE VERSION!]" : "";
+                list.Add($"Connected to Host [{_remoteInfo}] (Host: v{hVer}, You: v{MOD_VERSION}){note}");
             }
             return list;
         }
@@ -492,6 +501,34 @@ namespace DuskersCoopMod.Network
                     PacketWrapper packet = PacketWrapper.FromJson(line);
                     if (packet != null)
                     {
+                        if (packet.type == "CLIENT_HELLO")
+                        {
+                            var helloData = packet.GetData<HandshakeData>();
+                            string cVer = (helloData != null && !string.IsNullOrEmpty(helloData.version)) ? helloData.version : "Unknown";
+                            client.Version = cVer;
+                            if (!string.Equals(cVer, MOD_VERSION, StringComparison.OrdinalIgnoreCase))
+                            {
+                                PrintToLocalConsole($"[COOP CRITICAL] VERSION MISMATCH! You are Host (v{MOD_VERSION}), but {client.Name} connected with v{cVer}!", ConsoleMessageType.Warning);
+                                try
+                                {
+                                    DialogUI.Instance?.ShowDialog(
+                                        "COOP VERSION MISMATCH",
+                                        $"Operator '{client.Name}' joined with mod version v{cVer}, but you are running v{MOD_VERSION}!\n\nBoth operators must update to the same version.",
+                                        ModalWindowType.OK,
+                                        null
+                                    );
+                                }
+                                catch { }
+
+                                string mismatchPacket = PacketWrapper.Create("VERSION_MISMATCH", "Host", new HandshakeData
+                                {
+                                    playerName = "Host",
+                                    version = MOD_VERSION
+                                });
+                                client.Send(mismatchPacket);
+                            }
+                        }
+
                         packet.sender = client.Name; // Ensure sender is this client's name
                         EnqueueIncoming(packet);
 
@@ -535,6 +572,13 @@ namespace DuskersCoopMod.Network
 
                 _isConnected = true;
                 _remoteInfo = $"{ip}:{port}";
+
+                string hello = PacketWrapper.Create("CLIENT_HELLO", "Client", new HandshakeData
+                {
+                    playerName = "Operator",
+                    version = MOD_VERSION
+                });
+                _singleWriter.WriteLine(hello);
 
                 EnqueueIncoming(new PacketWrapper
                 {
@@ -669,9 +713,41 @@ namespace DuskersCoopMod.Network
                     var hs = packet.GetData<HandshakeData>();
                     if (hs != null)
                     {
-                        PrintToLocalConsole($"[COOP] Handshake verified: Welcome {hs.playerName}! (v{hs.version})", ConsoleMessageType.Benefit);
+                        _hostVersion = hs.version;
+                        PrintToLocalConsole($"[COOP] Handshake verified: Welcome {hs.playerName}! (Host: v{hs.version}, Local: v{MOD_VERSION})", ConsoleMessageType.Benefit);
+                        if (!string.IsNullOrEmpty(hs.version) && !string.Equals(hs.version, MOD_VERSION, StringComparison.OrdinalIgnoreCase))
+                        {
+                            PrintToLocalConsole($"[COOP CRITICAL] VERSION MISMATCH! Host is running v{hs.version}, but you have v{MOD_VERSION} installed! Incompatibilities will occur!", ConsoleMessageType.Warning);
+                            try
+                            {
+                                DialogUI.Instance?.ShowDialog(
+                                    "MOD VERSION INCOMPATIBLE",
+                                    $"The Host is running Duskers Coop Mod v{hs.version}, but your game has v{MOD_VERSION} installed.\n\nGameplay bugs, missing actions and desyncs will happen! Please update your mod to v{hs.version} to match the Host.",
+                                    ModalWindowType.OK,
+                                    null
+                                );
+                            }
+                            catch { }
+                        }
                         OnHandshakeReceived?.Invoke(hs.playerName);
                     }
+                    break;
+
+                case "VERSION_MISMATCH":
+                    var vm = packet.GetData<HandshakeData>();
+                    string hostV = (vm != null && !string.IsNullOrEmpty(vm.version)) ? vm.version : "Unknown";
+                    _hostVersion = hostV;
+                    PrintToLocalConsole($"[COOP CRITICAL] VERSION MISMATCH! Host is running v{hostV}, but you have v{MOD_VERSION} installed!", ConsoleMessageType.Warning);
+                    try
+                    {
+                        DialogUI.Instance?.ShowDialog(
+                            "MOD VERSION INCOMPATIBLE",
+                            $"The Host is running Duskers Coop Mod v{hostV}, but your game has v{MOD_VERSION} installed.\n\nPlease update your mod to v{hostV} to match the Host.",
+                            ModalWindowType.OK,
+                            null
+                        );
+                    }
+                    catch { }
                     break;
 
                 case "SAVE_SYNC":

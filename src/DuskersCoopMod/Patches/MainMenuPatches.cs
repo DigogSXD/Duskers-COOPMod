@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DuskersCoopMod.Network;
 using DuskersCoopMod.Save;
 using DuskersCoopMod.UI;
 using HarmonyLib;
@@ -34,7 +35,7 @@ namespace DuskersCoopMod.Patches
                 }, num++));
 
                 // 2. [M]ultiplayer
-                var mpItem = new DuskersMenuItem("[M]ultiplayer", KeyCode.M, (item) =>
+                var mpItem = new DuskersMenuItem($"[M]ultiplayer (v{CoopNetworkManager.MOD_VERSION})", KeyCode.M, (item) =>
                 {
                     new CoopMenuScreen();
                 }, num++);

@@ -18,7 +18,7 @@ namespace DuskersCoopMod.UI
 
         protected override void Initialize()
         {
-            ActiveText = "Multiplayer Operations";
+            ActiveText = $"Multiplayer Operations (Mod v{CoopNetworkManager.MOD_VERSION})";
             IgnoreCancel = false;
         }
 
@@ -52,14 +52,14 @@ namespace DuskersCoopMod.UI
                 tip.Disabled = true;
                 MenuPanelUI.Instance.AddMenuItem(tip);
 
-                var status = new DuskersMenuItem("Status: Ready (Steamworks Active)", KeyCode.None, null, num++);
+                var status = new DuskersMenuItem($"Status: Ready (Steamworks Active) - Mod v{CoopNetworkManager.MOD_VERSION}", KeyCode.None, null, num++);
                 status.Disabled = true;
                 MenuPanelUI.Instance.AddMenuItem(status);
             }
             else if (isHost)
             {
                 // Host State
-                var header = new DuskersMenuItem("=== HOST SESSION (STEAM LOBBY) ===", KeyCode.None, null, num++);
+                var header = new DuskersMenuItem($"=== HOST SESSION (STEAM LOBBY) [v{CoopNetworkManager.MOD_VERSION}] ===", KeyCode.None, null, num++);
                 header.Disabled = true;
                 header.OverridenColor = Color.cyan;
                 MenuPanelUI.Instance.AddMenuItem(header);
@@ -103,8 +103,13 @@ namespace DuskersCoopMod.UI
 
                 foreach (var opName in ops)
                 {
-                    var opItem = new DuskersMenuItem($" - {opName}", KeyCode.None, null, num++);
+                    string label = opName.StartsWith(" - ") ? opName : $" - {opName}";
+                    var opItem = new DuskersMenuItem(label, KeyCode.None, null, num++);
                     opItem.Disabled = true;
+                    if (label.Contains("INCOMPATIBLE"))
+                    {
+                        opItem.OverridenColor = Color.red;
+                    }
                     MenuPanelUI.Instance.AddMenuItem(opItem);
                 }
 
@@ -125,7 +130,7 @@ namespace DuskersCoopMod.UI
                     LaunchGameSafely();
                 }, num++));
 
-                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[D]isconnect / Stop Server", KeyCode.D, (m) =>
+                MenuPanelUI.Instance.AddMenuItem(new DuskersMenuItem("[D]isconnect / Close Session", KeyCode.D, (m) =>
                 {
                     SteamCoopManager.Instance?.LeaveLobby();
                     net.Disconnect();
@@ -135,20 +140,48 @@ namespace DuskersCoopMod.UI
             else if (isClient)
             {
                 // Client State
-                var header = new DuskersMenuItem("=== REMOTE OPERATOR SESSION ===", KeyCode.None, null, num++);
+                string hVer = !string.IsNullOrEmpty(net?.HostVersion) ? net.HostVersion : "Unknown";
+                bool mismatch = !string.IsNullOrEmpty(net?.HostVersion) && !string.Equals(net.HostVersion, CoopNetworkManager.MOD_VERSION, StringComparison.OrdinalIgnoreCase);
+
+                var header = new DuskersMenuItem($"=== REMOTE OPERATOR SESSION [v{CoopNetworkManager.MOD_VERSION}] ===", KeyCode.None, null, num++);
                 header.Disabled = true;
-                header.OverridenColor = Color.cyan;
+                header.OverridenColor = mismatch ? Color.red : Color.cyan;
                 MenuPanelUI.Instance.AddMenuItem(header);
+
+                if (mismatch)
+                {
+                    var alert = new DuskersMenuItem($"[!] INCOMPATIBLE: Host has v{hVer}, You have v{CoopNetworkManager.MOD_VERSION}!", KeyCode.None, null, num++);
+                    alert.Disabled = true;
+                    alert.OverridenColor = Color.red;
+                    MenuPanelUI.Instance.AddMenuItem(alert);
+                }
 
                 bool isConn = net.IsConnected;
                 string clientStatus = isConn
-                    ? $"[CONNECTED] Host: {net.RemoteEndpointInfo}"
+                    ? $"[CONNECTED] Host (v{hVer}): {net.RemoteEndpointInfo}"
                     : "Connecting to Host...";
 
                 var statusItem = new DuskersMenuItem(clientStatus, KeyCode.None, null, num++);
                 statusItem.Disabled = true;
-                statusItem.OverridenColor = isConn ? Color.green : Color.yellow;
+                statusItem.OverridenColor = isConn ? (mismatch ? Color.red : Color.green) : Color.yellow;
                 MenuPanelUI.Instance.AddMenuItem(statusItem);
+
+                // List connected operators
+                List<string> ops = net.GetConnectedOperatorsList();
+                if (ops != null && ops.Count > 0)
+                {
+                    foreach (var op in ops)
+                    {
+                        string label = op.StartsWith(" - ") ? op : $" - {op}";
+                        var opItem = new DuskersMenuItem(label, KeyCode.None, null, num++);
+                        opItem.Disabled = true;
+                        if (label.Contains("INCOMPATIBLE"))
+                        {
+                            opItem.OverridenColor = Color.red;
+                        }
+                        MenuPanelUI.Instance.AddMenuItem(opItem);
+                    }
+                }
 
                 var tip = new DuskersMenuItem("Shared Terminal active. All operators share fleet control.", KeyCode.None, null, num++);
                 tip.Disabled = true;

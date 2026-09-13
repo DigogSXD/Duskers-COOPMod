@@ -12,6 +12,7 @@ namespace DuskersCoopMod.Network
         public CSteamID SteamId;
         public string Name;
         public int Id;
+        public string Version = "Unknown";
     }
 
     public class SteamCoopManager : MonoBehaviour
@@ -285,6 +286,35 @@ namespace DuskersCoopMod.Network
                     BroadcastP2P(PacketWrapper.Create("SYSTEM_LOG", "Host", $"[COOP] {op.Name} joined the command bridge!"), senderId);
                 }
 
+                if (packet.type == "STEAM_HELLO")
+                {
+                    var helloData = packet.GetData<HandshakeData>();
+                    string clientVer = (helloData != null && !string.IsNullOrEmpty(helloData.version)) ? helloData.version : "Unknown";
+                    op.Version = clientVer;
+
+                    if (!string.Equals(clientVer, CoopNetworkManager.MOD_VERSION, StringComparison.OrdinalIgnoreCase))
+                    {
+                        CoopNetworkManager.Instance.PrintToLocalConsole($"[COOP CRITICAL] VERSION MISMATCH! You are Host (v{CoopNetworkManager.MOD_VERSION}), but {op.Name} connected with v{clientVer}! Desyncs and bugs will occur! Both players MUST use v{CoopNetworkManager.MOD_VERSION}.", ConsoleMessageType.Warning);
+                        try
+                        {
+                            DialogUI.Instance?.ShowDialog(
+                                "COOP VERSION MISMATCH",
+                                $"Operator '{op.Name}' joined with mod version v{clientVer}, but you are running v{CoopNetworkManager.MOD_VERSION}!\n\nGameplay desyncs will occur. Both operators must update to the same version.",
+                                ModalWindowType.OK,
+                                null
+                            );
+                        }
+                        catch { }
+
+                        string mismatchPacket = PacketWrapper.Create("VERSION_MISMATCH", "Host", new HandshakeData
+                        {
+                            playerName = "Host",
+                            version = CoopNetworkManager.MOD_VERSION
+                        });
+                        SendP2PTo(senderId, mismatchPacket);
+                    }
+                }
+
                 packet.sender = op.Name;
                 CoopNetworkManager.Instance.EnqueueIncoming(packet);
 
@@ -343,16 +373,21 @@ namespace DuskersCoopMod.Network
             if (IsSteamHost)
             {
                 string hostName = SteamFriends.GetPersonaName();
-                list.Add($"Operator 1 ({hostName} - Host)");
+                list.Add($"Operator 1 ({hostName} - Host) [v{CoopNetworkManager.MOD_VERSION}]");
                 foreach (var op in _steamClients)
                 {
-                    list.Add($" - {op.Name} (Steam Operator)");
+                    bool mismatch = !string.Equals(op.Version, CoopNetworkManager.MOD_VERSION, StringComparison.OrdinalIgnoreCase);
+                    string status = mismatch ? $" [v{op.Version} - INCOMPATIBLE!]" : $" [v{op.Version}]";
+                    list.Add($" - {op.Name}{status}");
                 }
             }
             else if (IsSteamClient)
             {
                 string hostName = SteamFriends.GetFriendPersonaName(HostSteamId);
-                list.Add($"Connected to {hostName}'s Bridge (Steam P2P)");
+                string hVer = !string.IsNullOrEmpty(CoopNetworkManager.Instance?.HostVersion) ? CoopNetworkManager.Instance.HostVersion : "Unknown";
+                bool mismatch = !string.Equals(hVer, CoopNetworkManager.MOD_VERSION, StringComparison.OrdinalIgnoreCase);
+                string note = mismatch ? " [INCOMPATIBLE VERSION!]" : "";
+                list.Add($"Connected to {hostName}'s Bridge (Host: v{hVer}, You: v{CoopNetworkManager.MOD_VERSION}){note}");
             }
             return list;
         }
