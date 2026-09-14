@@ -14,7 +14,7 @@ namespace DuskersCoopMod.Patches
         [HarmonyPatch("open", new Type[] { typeof(bool), typeof(bool) })]
         public static void Open_Postfix(Door __instance, bool __result)
         {
-            if (IsApplyingDoorSync) return;
+            if (IsApplyingDoorSync || ConsolePatches.IsExecutingRemoteCommand) return;
             var net = CoopNetworkManager.Instance;
             if (net == null || !net.IsConnected) return;
 
@@ -25,17 +25,13 @@ namespace DuskersCoopMod.Patches
             {
                 net.BroadcastDoorState(label, true);
             }
-            else if (net.Role == NetworkRole.Client)
-            {
-                net.SendCommand(label);
-            }
         }
 
         [HarmonyPostfix]
         [HarmonyPatch("CloseDoor")]
         public static void CloseDoor_Postfix(Door __instance)
         {
-            if (IsApplyingDoorSync) return;
+            if (IsApplyingDoorSync || ConsolePatches.IsExecutingRemoteCommand) return;
             var net = CoopNetworkManager.Instance;
             if (net == null || !net.IsConnected) return;
 
@@ -45,10 +41,6 @@ namespace DuskersCoopMod.Patches
             if (net.Role == NetworkRole.Host)
             {
                 net.BroadcastDoorState(label, false);
-            }
-            else if (net.Role == NetworkRole.Client)
-            {
-                net.SendCommand(label);
             }
         }
     }

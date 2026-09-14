@@ -19,7 +19,7 @@ namespace DuskersCoopMod.Patches
                 {
                     // If this drone is not locally steered by this client,
                     // do not let client-side collider penetration fight the host's authoritative position!
-                    bool isLocalSteer = CoopNetworkManager.IsWindowFocused && (Time.time - net.LastClientSteeringTime < 0.15f) && (__instance.DroneNumber == net.LastClientSteeringDrone);
+                    bool isLocalSteer = (Time.time - net.LastClientSteeringTime < 0.35f) && (__instance.DroneNumber == net.LastClientSteeringDrone);
                     if (!isLocalSteer)
                     {
                         __result = false;

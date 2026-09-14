@@ -1141,12 +1141,6 @@ namespace DuskersCoopMod.Network
 
         public static bool IsSteeringInputActive()
         {
-            if (!IsWindowFocused)
-                return false;
-
-            if (ConsoleWindow3.Instance != null && ConsoleWindow3.Instance.CommandBeingEntered)
-                return false;
-
             try
             {
                 if (Input.GetButton("Up") || Input.GetButton("Down") || Input.GetButton("Left") || Input.GetButton("Right"))
@@ -1269,8 +1263,8 @@ namespace DuskersCoopMod.Network
         {
             if (packet == null || packet.drones == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
 
-            // Only skip local override if the client has window focus AND actively steered this specific drone in the last 150ms!
-            bool isClientLocallySteering = IsWindowFocused && (Time.time - _lastClientSteeringTime < 0.15f);
+            // Only skip local override if the client has actively steered this specific drone recently!
+            bool isClientLocallySteering = (Time.time - _lastClientSteeringTime < 0.35f);
 
             foreach (var item in packet.drones)
             {
@@ -1286,6 +1280,8 @@ namespace DuskersCoopMod.Network
                     Vector3 targetPos = new Vector3(item.x, item.y, 0f);
                     drone.MoveToPosition(targetPos);
                     drone.LastPosition = targetPos;
+                    Traverse.Create(drone).Field("lastPosition")?.SetValue(targetPos);
+                    drone.CurrentRawSpeed = 0f;
                     Traverse.Create(drone).Field("_directionalForce")?.SetValue(Vector3.zero);
                     Traverse.Create(drone).Field("distPerFrame")?.SetValue(Vector3.zero);
                     if (drone.transform != null)
@@ -1315,13 +1311,15 @@ namespace DuskersCoopMod.Network
             var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.droneNumber);
             if (drone != null)
             {
-                // If Host is NOT actively steering this exact drone, accept client's position!
-                bool hostSteeringThisDrone = IsWindowFocused && (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
+                // If Host is NOT actively steering this exact drone right now, accept client's position!
+                bool hostSteeringThisDrone = (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
                 if (!hostSteeringThisDrone)
                 {
                     Vector3 targetPos = new Vector3(packet.x, packet.y, 0f);
                     drone.MoveToPosition(targetPos);
                     drone.LastPosition = targetPos;
+                    Traverse.Create(drone).Field("lastPosition")?.SetValue(targetPos);
+                    drone.CurrentRawSpeed = 0f;
                     Traverse.Create(drone).Field("_directionalForce")?.SetValue(Vector3.zero);
                     Traverse.Create(drone).Field("distPerFrame")?.SetValue(Vector3.zero);
                     if (drone.transform != null)
