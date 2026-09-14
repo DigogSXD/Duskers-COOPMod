@@ -30,4 +30,21 @@ namespace DuskersCoopMod.Patches
             return true;
         }
     }
+
+    [HarmonyPatch(typeof(DroneManager))]
+    public static class DroneManagerViewPatches
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("switchCameraView")]
+        public static void SwitchCameraView_Postfix()
+        {
+            if (DroneManager.Instance != null && DroneManager.Instance.dronesList != null)
+            {
+                foreach (var d in DroneManager.Instance.dronesList)
+                {
+                    CoopNetworkManager.SyncDroneVisualHierarchy(d);
+                }
+            }
+        }
+    }
 }

@@ -115,6 +115,7 @@ namespace DuskersCoopMod.Network
         // Tactical synchronization timers and state
         private float _lastTacticalDronesSyncTime = 0f;
         private float _lastTacticalDoorsSyncTime = 0f;
+        private float _lastTacticalUpgradesSyncTime = 0f;
         private float _lastClientDroneSyncTime = 0f;
         private Vector3 _lastReportedClientDronePos = Vector3.zero;
         private float _lastReportedClientDroneRotY = 0f;
@@ -732,6 +733,40 @@ namespace DuskersCoopMod.Network
                     }
                     break;
 
+                case "CLIENT_SWAP_UPGRADES":
+                    if (Role == NetworkRole.Host)
+                    {
+                        var swapData = packet.GetData<SwapUpgradesPacket>();
+                        if (swapData != null)
+                        {
+                            ApplySwapUpgrades(swapData);
+                            BroadcastPacket(PacketWrapper.Create("SWAP_UPGRADES", "Host", swapData));
+                        }
+                    }
+                    break;
+
+                case "SWAP_UPGRADES":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var swapData = packet.GetData<SwapUpgradesPacket>();
+                        if (swapData != null)
+                        {
+                            ApplySwapUpgrades(swapData);
+                        }
+                    }
+                    break;
+
+                case "DRONE_UPGRADES_SYNC":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var upgradesData = packet.GetData<DroneUpgradesSyncPacket>();
+                        if (upgradesData != null)
+                        {
+                            ApplyDroneUpgradesSync(upgradesData);
+                        }
+                    }
+                    break;
+
                 case "CONSOLE_TEXT":
                     if (Role == NetworkRole.Client)
                     {
@@ -1219,6 +1254,43 @@ namespace DuskersCoopMod.Network
                         }
                     }
                 }
+
+                // Drone upgrades periodic sync at 1 Hz
+                if (Time.time - _lastTacticalUpgradesSyncTime >= 1.0f)
+                {
+                    _lastTacticalUpgradesSyncTime = Time.time;
+                    if (DroneManager.Instance != null && DroneManager.Instance.dronesList != null && DroneManager.Instance.dronesList.Count > 0)
+                    {
+                        var packet = new DroneUpgradesSyncPacket();
+                        foreach (var d in DroneManager.Instance.dronesList)
+                        {
+                            if (d == null) continue;
+                            var item = new DroneUpgradesSyncItem { droneNumber = d.DroneNumber };
+                            if (d.Upgrades != null)
+                            {
+                                for (int s = 0; s < d.Upgrades.Count; s++)
+                                {
+                                    var up = d.Upgrades[s];
+                                    if (up != null && up.Definition != null)
+                                    {
+                                        item.slots.Add(new UpgradeSlotSyncData
+                                        {
+                                            slotIndex = s,
+                                            type = up.Definition.Type.ToString(),
+                                            isBroken = up.IsBroken,
+                                            breakFactor = up.UpgradeBreakFactor
+                                        });
+                                    }
+                                }
+                            }
+                            packet.drones.Add(item);
+                        }
+                        if (packet.drones.Count > 0)
+                        {
+                            BroadcastPacket(PacketWrapper.Create("DRONE_UPGRADES_SYNC", "Host", packet));
+                        }
+                    }
+                }
             }
             // Client steering sync to Host at 25 Hz
             else if (Role == NetworkRole.Client)
@@ -1257,6 +1329,239 @@ namespace DuskersCoopMod.Network
                     }
                 }
             }
+
+            // Continuously maintain visual hierarchy and positioning for all drones on this machine
+            if (DroneManager.Instance != null && DroneManager.Instance.dronesList != null)
+            {
+                foreach (var d in DroneManager.Instance.dronesList)
+                {
+                    if (d != null)
+                    {
+                        SyncDroneVisualHierarchy(d);
+                    }
+                }
+            }
+        }
+
+        public static void SyncDroneVisualHierarchy(Drone drone)
+        {
+            if (drone == null) return;
+            try
+            {
+                var tr = Traverse.Create(drone);
+
+                var label = tr.Field<GameObject>("_labelSV")?.Value;
+                var labelRef = tr.Field<GameObject>("_labelSV_Reference")?.Value;
+                if (label != null && labelRef != null)
+                {
+                    label.transform.position = labelRef.transform.position;
+                    label.transform.rotation = labelRef.transform.rotation;
+                }
+
+                var img = tr.Field<GameObject>("_imagePlaneSV")?.Value;
+                var imgRef = tr.Field<GameObject>("_imagePlaneSV_Reference")?.Value;
+                if (img != null && imgRef != null)
+                {
+                    img.transform.position = imgRef.transform.position;
+                    img.transform.rotation = imgRef.transform.rotation;
+                }
+
+                var turret = tr.Field<GameObject>("_turretOverlay")?.Value;
+                var turretRef = tr.Field<GameObject>("_turretOverlay_Reference")?.Value;
+                if (turret != null && turretRef != null)
+                {
+                    turret.transform.position = turretRef.transform.position;
+                    turret.transform.rotation = turretRef.transform.rotation;
+                }
+
+                var shield = tr.Field<GameObject>("_shieldOverlay")?.Value;
+                var shieldRef = tr.Field<GameObject>("_shieldOverlay_Reference")?.Value;
+                if (shield != null && shieldRef != null)
+                {
+                    shield.transform.position = shieldRef.transform.position;
+                    shield.transform.rotation = shieldRef.transform.rotation;
+                }
+
+                if (drone.droneUIObject != null)
+                {
+                    drone.droneUIObject.RefreshInfoLabelPos();
+                }
+
+                // If in Drone View, ensure 3D model visibility for other drones in the same room
+                if (GlobalSettings.cameraMode == CameraMode.Drone)
+                {
+                    var curDrone = DroneManager.Instance?.CurrentDrone;
+                    if (curDrone != null && drone != curDrone)
+                    {
+                        bool sameRoom = drone.CurrentRoom != null && curDrone.CurrentRoom != null &&
+                                        (drone.CurrentRoom == curDrone.CurrentRoom || drone.CurrentRoom.boardingVessel);
+                        if (drone.droneViewModel != null)
+                        {
+                            drone.droneViewModel.SetActive(sameRoom);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Error syncing drone visuals for Drone {drone.DroneNumber}: {ex.Message}");
+            }
+        }
+
+        public void ApplySwapUpgrades(SwapUpgradesPacket packet)
+        {
+            if (packet == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
+            try
+            {
+                Drone droneA = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.droneA);
+                Drone droneB = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.droneB);
+                if (droneA == null || droneB == null) return;
+
+                Patches.DroneSwapPatches.IsApplyingRemoteSwap = true;
+                try
+                {
+                    var swapUI = DroneSwapUi2.Instance;
+                    if (swapUI != null && swapUI.IsVisible)
+                    {
+                        var panels = Traverse.Create(swapUI).Field("_dronePanels").GetValue<DroneSwapDroneInfoPanel[]>();
+                        if (panels != null && panels.Length >= 2 && panels[0].Drone == droneA && panels[1].Drone == droneB)
+                        {
+                            Traverse.Create(swapUI).Method("SwapSpecifiedSlots", packet.slotA, packet.slotB).GetValue();
+                            return;
+                        }
+                    }
+
+                    BaseDroneUpgrade upA = droneA.PullUpgrade(packet.slotA);
+                    BaseDroneUpgrade upB = droneB.PullUpgrade(packet.slotB);
+
+                    if (upA != null)
+                    {
+                        droneB.AddDroneUpgrade(packet.slotB, upA);
+                    }
+                    if (upB != null)
+                    {
+                        droneA.AddDroneUpgrade(packet.slotA, upB);
+                    }
+
+                    if (swapUI != null && swapUI.IsVisible)
+                    {
+                        var panels = Traverse.Create(swapUI).Field("_dronePanels").GetValue<DroneSwapDroneInfoPanel[]>();
+                        if (panels != null && panels.Length >= 2 && panels[0].Drone != null && panels[1].Drone != null)
+                        {
+                            swapUI.SetDrones(panels[0].Drone, panels[1].Drone);
+                        }
+                    }
+
+                    if (SchematicViewCanvas.Instance != null)
+                    {
+                        SchematicViewCanvas.Instance.RefreshDrone(droneA.DroneNumber);
+                        SchematicViewCanvas.Instance.RefreshDrone(droneB.DroneNumber);
+                    }
+
+                    if (DroneManager.Instance != null && DroneManager.Instance.currentDronePanel != null)
+                    {
+                        DroneManager.Instance.currentDronePanel.UpgradesChanged = true;
+                    }
+                }
+                finally
+                {
+                    Patches.DroneSwapPatches.IsApplyingRemoteSwap = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DuskersCoopMod] Error applying remote swap: {ex}");
+            }
+        }
+
+        private void ApplyDroneUpgradesSync(DroneUpgradesSyncPacket packet)
+        {
+            if (packet == null || packet.drones == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
+
+            try
+            {
+                bool anyChanged = false;
+                foreach (var item in packet.drones)
+                {
+                    if (item == null) continue;
+                    var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == item.droneNumber);
+                    if (drone == null) continue;
+
+                    bool droneChanged = false;
+                    int maxSlots = drone.NumberOfUpgradeSlots;
+
+                    for (int s = 0; s < maxSlots; s++)
+                    {
+                        var slotData = item.slots != null ? item.slots.Find(x => x != null && x.slotIndex == s) : null;
+                        BaseDroneUpgrade currentUp = (drone.Upgrades != null && s < drone.Upgrades.Count) ? drone.Upgrades[s] : null;
+
+                        if (slotData == null || string.IsNullOrEmpty(slotData.type))
+                        {
+                            if (currentUp != null)
+                            {
+                                drone.RemoveDroneUpgrade(s);
+                                droneChanged = true;
+                            }
+                        }
+                        else
+                        {
+                            string curTypeStr = (currentUp != null && currentUp.Definition != null) ? currentUp.Definition.Type.ToString() : null;
+                            if (!string.Equals(curTypeStr, slotData.type, StringComparison.OrdinalIgnoreCase))
+                            {
+                                try
+                                {
+                                    DroneUpgradeType parsedType = (DroneUpgradeType)Enum.Parse(typeof(DroneUpgradeType), slotData.type, true);
+                                    BaseDroneUpgrade newUp = DroneUpgradeFactory.CreateUpgradeInstance(parsedType);
+                                    if (newUp != null)
+                                    {
+                                        if (slotData.isBroken)
+                                        {
+                                            newUp.Break();
+                                        }
+                                        drone.AddDroneUpgrade(s, newUp);
+                                        droneChanged = true;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Debug.LogWarning($"[DuskersCoopMod] Could not parse upgrade type '{slotData.type}': {ex.Message}");
+                                }
+                            }
+                        }
+                    }
+
+                    if (droneChanged)
+                    {
+                        anyChanged = true;
+                        if (SchematicViewCanvas.Instance != null)
+                        {
+                            SchematicViewCanvas.Instance.RefreshDrone(drone.DroneNumber);
+                        }
+                    }
+                }
+
+                if (anyChanged)
+                {
+                    if (DroneManager.Instance.currentDronePanel != null)
+                    {
+                        DroneManager.Instance.currentDronePanel.UpgradesChanged = true;
+                    }
+
+                    var swapUI = DroneSwapUi2.Instance;
+                    if (swapUI != null && swapUI.IsVisible)
+                    {
+                        var panels = Traverse.Create(swapUI).Field("_dronePanels").GetValue<DroneSwapDroneInfoPanel[]>();
+                        if (panels != null && panels.Length >= 2 && panels[0].Drone != null && panels[1].Drone != null)
+                        {
+                            swapUI.SetDrones(panels[0].Drone, panels[1].Drone);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DuskersCoopMod] Error in ApplyDroneUpgradesSync: {ex}");
+            }
         }
 
         private void ApplyDronesSync(DronesSyncPacket packet)
@@ -1290,10 +1595,7 @@ namespace DuskersCoopMod.Network
                         drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
                         Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
                     }
-                    if (drone.droneUIObject != null)
-                    {
-                        drone.droneUIObject.RefreshInfoLabelPos();
-                    }
+                    SyncDroneVisualHierarchy(drone);
                     try
                     {
                         DroneManager.Instance?.CalcDroneCurrentRoom(drone);
@@ -1328,10 +1630,7 @@ namespace DuskersCoopMod.Network
                         drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
                         Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
                     }
-                    if (drone.droneUIObject != null)
-                    {
-                        drone.droneUIObject.RefreshInfoLabelPos();
-                    }
+                    SyncDroneVisualHierarchy(drone);
                     try
                     {
                         DroneManager.Instance?.CalcDroneCurrentRoom(drone);

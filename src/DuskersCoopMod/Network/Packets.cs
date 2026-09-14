@@ -151,5 +151,37 @@ namespace DuskersCoopMod.Network
         public string label;
         public bool isOpen;
     }
+
+    [Serializable]
+    public class SwapUpgradesPacket
+    {
+        public int droneA;
+        public int slotA;
+        public int droneB;
+        public int slotB;
+    }
+
+    [Serializable]
+    public class UpgradeSlotSyncData
+    {
+        public int slotIndex;
+        public string type;
+        public bool isBroken;
+        public float breakFactor;
+    }
+
+    [Serializable]
+    public class DroneUpgradesSyncItem
+    {
+        public int droneNumber;
+        public System.Collections.Generic.List<UpgradeSlotSyncData> slots = new System.Collections.Generic.List<UpgradeSlotSyncData>();
+    }
+
+    [Serializable]
+    public class DroneUpgradesSyncPacket
+    {
+        public System.Collections.Generic.List<DroneUpgradesSyncItem> drones = new System.Collections.Generic.List<DroneUpgradesSyncItem>();
+    }
 }
+
 
