@@ -12,7 +12,7 @@ namespace DuskersCoopMod.Patches
 
         [HarmonyPostfix]
         [HarmonyPatch("SwapSpecifiedSlots")]
-        public static void SwapSpecifiedSlots_Postfix(DroneSwapUi2 __instance, int slotA, int slotB)
+        public static void SwapSpecifiedSlots_Postfix(DroneSwapUi2 __instance, int leftSlotNum, int rightSlotNum)
         {
             if (IsApplyingRemoteSwap) return;
             var net = CoopNetworkManager.Instance;
@@ -26,9 +26,9 @@ namespace DuskersCoopMod.Patches
                     var packet = new SwapUpgradesPacket
                     {
                         droneA = panels[0].Drone.DroneNumber,
-                        slotA = slotA,
+                        slotA = leftSlotNum,
                         droneB = panels[1].Drone.DroneNumber,
-                        slotB = slotB
+                        slotB = rightSlotNum
                     };
 
                     if (net.Role == NetworkRole.Host)
