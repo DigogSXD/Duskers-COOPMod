@@ -133,6 +133,19 @@ namespace DuskersCoopMod.Network
     }
 
     [Serializable]
+    public class SingleDroneSyncPacket
+    {
+        public int droneNumber;
+        public float x;
+        public float y;
+        public float z;
+        public float rotZ;
+        public float rotY;
+        public float hp;
+        public bool isDead;
+    }
+
+    [Serializable]
     public class DoorSyncItem
     {
         public string label;

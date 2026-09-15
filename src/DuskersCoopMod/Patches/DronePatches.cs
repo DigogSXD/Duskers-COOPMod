@@ -13,18 +13,30 @@ namespace DuskersCoopMod.Patches
         public static bool EnforceNonPenetrationConstraint_Prefix(Drone __instance, ref bool __result)
         {
             var net = CoopNetworkManager.Instance;
-            if (net != null && net.IsConnected)
+            if (net != null && net.IsConnected && net.Role == NetworkRole.Client)
             {
-                if (net.Role == NetworkRole.Client)
+                bool isLocalSteer = (__instance == DroneManager.Instance?.CurrentDrone) && CoopNetworkManager.IsSteeringInputActive();
+                if (!isLocalSteer)
                 {
-                    // If this drone is not locally steered by this client,
-                    // do not let client-side collider penetration fight the host's authoritative position!
-                    bool isLocalSteer = (Time.time - net.LastClientSteeringTime < 0.35f) && (__instance.DroneNumber == net.LastClientSteeringDrone);
-                    if (!isLocalSteer)
-                    {
-                        __result = false;
-                        return false; // Skip penetration constraint!
-                    }
+                    __result = false;
+                    return false; // Skip penetration constraint!
+                }
+            }
+            return true;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch("IsInOuterSpace")]
+        public static bool IsInOuterSpace_Prefix(Drone __instance, ref bool __result)
+        {
+            var net = CoopNetworkManager.Instance;
+            if (net != null && net.IsConnected && net.Role == NetworkRole.Client)
+            {
+                bool isLocalSteer = (__instance == DroneManager.Instance?.CurrentDrone) && CoopNetworkManager.IsSteeringInputActive();
+                if (!isLocalSteer)
+                {
+                    __result = false;
+                    return false; // Skip outer space rollback on client for remote drones!
                 }
             }
             return true;
@@ -43,6 +55,20 @@ namespace DuskersCoopMod.Patches
                 foreach (var d in DroneManager.Instance.dronesList)
                 {
                     CoopNetworkManager.SyncDroneVisualHierarchy(d);
+                }
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch("SetDroneNumber", new Type[] { typeof(int) })]
+        public static void SetDroneNumber_Postfix(int droneNumber)
+        {
+            if (DroneManager.Instance != null && DroneManager.Instance.CurrentDrone != null)
+            {
+                CoopNetworkManager.SyncDroneVisualHierarchy(DroneManager.Instance.CurrentDrone);
+                if (GlobalSettings.cameraMode == CameraMode.Drone)
+                {
+                    DroneManager.Instance.positionDroneCamera();
                 }
             }
         }

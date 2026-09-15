@@ -116,6 +116,7 @@ namespace DuskersCoopMod.Network
         private float _lastTacticalDronesSyncTime = 0f;
         private float _lastTacticalDoorsSyncTime = 0f;
         private float _lastTacticalUpgradesSyncTime = 0f;
+        private float _lastHostSteeringSyncTime = 0f;
         private float _lastClientDroneSyncTime = 0f;
         private Vector3 _lastReportedClientDronePos = Vector3.zero;
         private float _lastReportedClientDroneRotY = 0f;
@@ -700,6 +701,17 @@ namespace DuskersCoopMod.Network
                     }
                     break;
 
+                case "SINGLE_DRONE_SYNC":
+                    if (Role == NetworkRole.Client)
+                    {
+                        var singleDrone = packet.GetData<SingleDroneSyncPacket>();
+                        if (singleDrone != null)
+                        {
+                            ApplySingleDroneSync(singleDrone);
+                        }
+                    }
+                    break;
+
                 case "CLIENT_DRONE_SYNC":
                     if (Role == NetworkRole.Host)
                     {
@@ -1176,6 +1188,26 @@ namespace DuskersCoopMod.Network
 
         public static bool IsSteeringInputActive()
         {
+            if (!IsWindowFocused) return false;
+
+            // In Duskers, manual arrow/WASD drone steering ONLY works in Drone View (CameraMode.Drone)
+            if (GlobalSettings.cameraMode != CameraMode.Drone) return false;
+
+            // Do not steer if paused or overlay/dialog window is active
+            if (GlobalSettings.IsGamePaused || GlobalSettings.ShowingGameOverlayWindow) return false;
+
+            try
+            {
+                if (DialogUI.Instance != null && DialogUI.Instance.IsShowing) return false;
+            }
+            catch { }
+
+            try
+            {
+                if (DroneSwapUi2.Instance != null && DroneSwapUi2.Instance.IsVisible) return false;
+            }
+            catch { }
+
             try
             {
                 if (Input.GetButton("Up") || Input.GetButton("Down") || Input.GetButton("Left") || Input.GetButton("Right"))
@@ -1196,8 +1228,33 @@ namespace DuskersCoopMod.Network
             // Host authoritative tactical broadcast
             if (Role == NetworkRole.Host && ConnectedCount > 0)
             {
-                // Drones sync at 20 Hz
-                if (Time.time - _lastTacticalDronesSyncTime >= 0.05f)
+                // Immediate fast sync for Host's actively steered drone (30 Hz)
+                if (DroneManager.Instance != null && DroneManager.Instance.CurrentDrone != null && IsSteeringInputActive())
+                {
+                    if (Time.time - _lastHostSteeringSyncTime >= 0.033f)
+                    {
+                        _lastHostSteeringSyncTime = Time.time;
+                        var hostDrone = DroneManager.Instance.CurrentDrone;
+                        Vector3 hostPos = hostDrone.GetDronePosition();
+                        Quaternion hostRot = hostDrone.GetDroneRotation();
+                        float hostRotZ = hostRot.eulerAngles.z;
+
+                        BroadcastPacket(PacketWrapper.Create("SINGLE_DRONE_SYNC", "Host", new SingleDroneSyncPacket
+                        {
+                            droneNumber = hostDrone.DroneNumber,
+                            x = hostPos.x,
+                            y = hostPos.y,
+                            z = hostPos.z,
+                            rotZ = hostRotZ,
+                            rotY = hostRotZ,
+                            hp = hostDrone.CurrentHitPoints,
+                            isDead = hostDrone.IsDead
+                        }));
+                    }
+                }
+
+                // Periodic full drones fallback sync at 10 Hz
+                if (Time.time - _lastTacticalDronesSyncTime >= 0.10f)
                 {
                     _lastTacticalDronesSyncTime = Time.time;
                     if (DroneManager.Instance != null && DroneManager.Instance.dronesList != null && DroneManager.Instance.dronesList.Count > 0)
@@ -1292,7 +1349,7 @@ namespace DuskersCoopMod.Network
                     }
                 }
             }
-            // Client steering sync to Host at 25 Hz
+            // Client steering sync to Host at 30 Hz (ONLY when client is actively steering in Drone View!)
             else if (Role == NetworkRole.Client)
             {
                 if (DroneManager.Instance != null && DroneManager.Instance.CurrentDrone != null)
@@ -1303,17 +1360,13 @@ namespace DuskersCoopMod.Network
                     {
                         _lastClientSteeringTime = Time.time;
                         _lastClientSteeringDrone = curDrone.DroneNumber;
-                    }
 
-                    if (Time.time - _lastClientDroneSyncTime >= 0.04f)
-                    {
-                        _lastClientDroneSyncTime = Time.time;
-                        Vector3 curPos = curDrone.GetDronePosition();
-                        float curRotZ = curDrone.GetDroneRotation().eulerAngles.z;
-
-                        bool hasMoved = Vector3.Distance(curPos, _lastReportedClientDronePos) > 0.005f || Mathf.Abs(curRotZ - _lastReportedClientDroneRotY) > 0.2f;
-                        if (isSteering || hasMoved)
+                        if (Time.time - _lastClientDroneSyncTime >= 0.033f)
                         {
+                            _lastClientDroneSyncTime = Time.time;
+                            Vector3 curPos = curDrone.GetDronePosition();
+                            float curRotZ = curDrone.GetDroneRotation().eulerAngles.z;
+
                             _lastReportedClientDronePos = curPos;
                             _lastReportedClientDroneRotY = curRotZ;
                             SendPacketToHost(PacketWrapper.Create("CLIENT_DRONE_SYNC", "Operator", new ClientDroneSyncPacket
@@ -1564,59 +1617,19 @@ namespace DuskersCoopMod.Network
             }
         }
 
-        private void ApplyDronesSync(DronesSyncPacket packet)
-        {
-            if (packet == null || packet.drones == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
-
-            // Only skip local override if the client has actively steered this specific drone recently!
-            bool isClientLocallySteering = (Time.time - _lastClientSteeringTime < 0.35f);
-
-            foreach (var item in packet.drones)
-            {
-                if (item == null) continue;
-                var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == item.droneNumber);
-                if (drone != null)
-                {
-                    if (isClientLocallySteering && drone.DroneNumber == _lastClientSteeringDrone)
-                    {
-                        continue;
-                    }
-
-                    Vector3 targetPos = new Vector3(item.x, item.y, 0f);
-                    drone.MoveToPosition(targetPos);
-                    drone.LastPosition = targetPos;
-                    Traverse.Create(drone).Field("lastPosition")?.SetValue(targetPos);
-                    drone.CurrentRawSpeed = 0f;
-                    Traverse.Create(drone).Field("_directionalForce")?.SetValue(Vector3.zero);
-                    Traverse.Create(drone).Field("distPerFrame")?.SetValue(Vector3.zero);
-                    if (drone.transform != null)
-                    {
-                        float targetRotZ = (item.rotZ != 0f) ? item.rotZ : item.rotY;
-                        drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
-                        Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
-                    }
-                    SyncDroneVisualHierarchy(drone);
-                    try
-                    {
-                        DroneManager.Instance?.CalcDroneCurrentRoom(drone);
-                        DroneManager.Instance?.CalcDroneCurrentCorridor(drone);
-                    }
-                    catch { }
-                }
-            }
-        }
-
-        private void ApplyClientDroneSync(ClientDroneSyncPacket packet)
+        private void ApplySingleDroneSync(SingleDroneSyncPacket packet)
         {
             if (packet == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
 
-            var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.droneNumber);
-            if (drone != null)
+            try
             {
-                // If Host is NOT actively steering this exact drone right now, accept client's position!
-                bool hostSteeringThisDrone = (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
-                if (!hostSteeringThisDrone)
+                var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.droneNumber);
+                if (drone != null)
                 {
+                    // Only skip Host's authoritative update if the client is actively steering THIS EXACT drone RIGHT NOW in Drone View!
+                    bool clientSteeringThisNow = (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
+                    if (clientSteeringThisNow) return;
+
                     Vector3 targetPos = new Vector3(packet.x, packet.y, 0f);
                     drone.MoveToPosition(targetPos);
                     drone.LastPosition = targetPos;
@@ -1637,7 +1650,138 @@ namespace DuskersCoopMod.Network
                         DroneManager.Instance?.CalcDroneCurrentCorridor(drone);
                     }
                     catch { }
+
+                    if (DroneManager.Instance.CurrentDrone == drone)
+                    {
+                        _lastReportedClientDronePos = targetPos;
+                        _lastReportedClientDroneRotY = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY;
+                        if (GlobalSettings.cameraMode == CameraMode.Drone)
+                        {
+                            DroneManager.Instance.positionDroneCamera();
+                        }
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Error applying SingleDroneSync for Drone {packet.droneNumber}: {ex.Message}");
+            }
+        }
+
+        private void ApplyDronesSync(DronesSyncPacket packet)
+        {
+            if (packet == null || packet.drones == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
+
+            foreach (var item in packet.drones)
+            {
+                if (item == null) continue;
+                try
+                {
+                    var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == item.droneNumber);
+                    if (drone != null)
+                    {
+                        bool clientSteeringThisNow = (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
+                        if (clientSteeringThisNow) continue;
+
+                        Vector3 targetPos = new Vector3(item.x, item.y, 0f);
+                        drone.MoveToPosition(targetPos);
+                        drone.LastPosition = targetPos;
+                        Traverse.Create(drone).Field("lastPosition")?.SetValue(targetPos);
+                        drone.CurrentRawSpeed = 0f;
+                        Traverse.Create(drone).Field("_directionalForce")?.SetValue(Vector3.zero);
+                        Traverse.Create(drone).Field("distPerFrame")?.SetValue(Vector3.zero);
+                        if (drone.transform != null)
+                        {
+                            float targetRotZ = (item.rotZ != 0f) ? item.rotZ : item.rotY;
+                            drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
+                            Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
+                        }
+                        SyncDroneVisualHierarchy(drone);
+                        try
+                        {
+                            DroneManager.Instance?.CalcDroneCurrentRoom(drone);
+                            DroneManager.Instance?.CalcDroneCurrentCorridor(drone);
+                        }
+                        catch { }
+
+                        if (DroneManager.Instance.CurrentDrone == drone)
+                        {
+                            _lastReportedClientDronePos = targetPos;
+                            _lastReportedClientDroneRotY = (item.rotZ != 0f) ? item.rotZ : item.rotY;
+                            if (GlobalSettings.cameraMode == CameraMode.Drone)
+                            {
+                                DroneManager.Instance.positionDroneCamera();
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[DuskersCoopMod] Error applying DronesSync for Drone {item.droneNumber}: {ex.Message}");
+                }
+            }
+        }
+
+        private void ApplyClientDroneSync(ClientDroneSyncPacket packet)
+        {
+            if (packet == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
+
+            try
+            {
+                var drone = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.droneNumber);
+                if (drone != null)
+                {
+                    // If Host is NOT actively steering this exact drone right now, accept client's position!
+                    bool hostSteeringThisDrone = (DroneManager.Instance.CurrentDrone == drone) && IsSteeringInputActive();
+                    if (!hostSteeringThisDrone)
+                    {
+                        Vector3 targetPos = new Vector3(packet.x, packet.y, 0f);
+                        drone.MoveToPosition(targetPos);
+                        drone.LastPosition = targetPos;
+                        Traverse.Create(drone).Field("lastPosition")?.SetValue(targetPos);
+                        drone.CurrentRawSpeed = 0f;
+                        Traverse.Create(drone).Field("_directionalForce")?.SetValue(Vector3.zero);
+                        Traverse.Create(drone).Field("distPerFrame")?.SetValue(Vector3.zero);
+                        if (drone.transform != null)
+                        {
+                            float targetRotZ = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY;
+                            drone.transform.rotation = Quaternion.Euler(0f, 0f, targetRotZ);
+                            Traverse.Create(drone).Field("_heading")?.SetValue(drone.transform.up);
+                        }
+                        SyncDroneVisualHierarchy(drone);
+                        try
+                        {
+                            DroneManager.Instance?.CalcDroneCurrentRoom(drone);
+                            DroneManager.Instance?.CalcDroneCurrentCorridor(drone);
+                        }
+                        catch { }
+
+                        if (DroneManager.Instance.CurrentDrone == drone && GlobalSettings.cameraMode == CameraMode.Drone)
+                        {
+                            DroneManager.Instance.positionDroneCamera();
+                        }
+
+                        // Broadcast to other clients if more than one is connected
+                        if (ConnectedCount > 1)
+                        {
+                            BroadcastPacket(PacketWrapper.Create("SINGLE_DRONE_SYNC", "Host", new SingleDroneSyncPacket
+                            {
+                                droneNumber = drone.DroneNumber,
+                                x = targetPos.x,
+                                y = targetPos.y,
+                                z = targetPos.z,
+                                rotZ = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY,
+                                rotY = (packet.rotZ != 0f) ? packet.rotZ : packet.rotY,
+                                hp = drone.CurrentHitPoints,
+                                isDead = drone.IsDead
+                            }));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] Error applying ClientDroneSync for Drone {packet.droneNumber}: {ex.Message}");
             }
         }
 
