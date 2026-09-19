@@ -27,6 +27,9 @@ namespace DuskersCoopMod
                 ConfigPort = Config.Bind("Network", "ServerPort", 7777, "The TCP port used for hosting multiplayer sessions (1024-65535)");
                 _harmony = new Harmony(PLUGIN_GUID);
                 _harmony.PatchAll();
+                // TowPatches are applied manually because the tow method name varies across
+                // Duskers builds — manual patching lets us try multiple candidates safely.
+                Patches.TowPatches.ApplyPatches(_harmony);
                 Logger.LogInfo("Harmony patches applied successfully.");
 
                 GameObject netGo = new GameObject("DuskersCoopNetworkManager");

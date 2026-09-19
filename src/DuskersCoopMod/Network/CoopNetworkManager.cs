@@ -161,26 +161,43 @@ namespace DuskersCoopMod.Network
             return true;
         }
 
+        // Queue now stores both the packet and (if on Host) the originating client,
+        // so we can exclude the sender from echo-broadcasts (e.g. SWAP_UPGRADES).
+        private readonly struct IncomingPacket
+        {
+            public readonly PacketWrapper Packet;
+            public readonly ConnectedClient Sender; // null when coming from single-client or Steam
+            public IncomingPacket(PacketWrapper p, ConnectedClient s) { Packet = p; Sender = s; }
+        }
+
+        private readonly Queue<IncomingPacket> _incomingQueueV2 = new Queue<IncomingPacket>();
+
         private void Update()
         {
             Application.runInBackground = true;
 
             // Process incoming packets on Unity's main thread
-            List<PacketWrapper> packetsToProcess = null;
+            List<IncomingPacket> packetsToProcess = null;
             lock (_incomingLock)
             {
                 if (_incomingQueue.Count > 0)
                 {
-                    packetsToProcess = new List<PacketWrapper>(_incomingQueue);
-                    _incomingQueue.Clear();
+                    // Legacy queue (Steam / single-client path)
+                    while (_incomingQueue.Count > 0)
+                        _incomingQueueV2.Enqueue(new IncomingPacket(_incomingQueue.Dequeue(), null));
+                }
+                if (_incomingQueueV2.Count > 0)
+                {
+                    packetsToProcess = new List<IncomingPacket>(_incomingQueueV2);
+                    _incomingQueueV2.Clear();
                 }
             }
 
             if (packetsToProcess != null)
             {
-                foreach (var packet in packetsToProcess)
+                foreach (var ip in packetsToProcess)
                 {
-                    ProcessPacket(packet);
+                    ProcessPacket(ip.Packet, ip.Sender);
                 }
             }
 
@@ -470,11 +487,14 @@ namespace DuskersCoopMod.Network
                         _clients.Add(client);
                     }
 
-                    EnqueueIncoming(new PacketWrapper
+                    lock (_incomingLock)
                     {
-                        type = "SYSTEM_LOG",
-                        data = $"[COOP] {client.Name} joined from {client.RemoteInfo}! (Total: {_clients.Count + 1} operators)"
-                    });
+                        _incomingQueueV2.Enqueue(new IncomingPacket(new PacketWrapper
+                        {
+                            type = "SYSTEM_LOG",
+                            data = $"[COOP] {client.Name} joined from {client.RemoteInfo}! (Total: {_clients.Count + 1} operators)"
+                        }, null));
+                    }
 
                     // Send Handshake with assigned operator name
                     string handshake = PacketWrapper.Create("HANDSHAKE", "Host", new HandshakeData
@@ -565,7 +585,12 @@ namespace DuskersCoopMod.Network
                         }
 
                         packet.sender = client.Name; // Ensure sender is this client's name
-                        EnqueueIncoming(packet);
+
+                        // Enqueue with the originating client so ProcessPacket can exclude them from broadcasts
+                        lock (_incomingLock)
+                        {
+                            _incomingQueueV2.Enqueue(new IncomingPacket(packet, client));
+                        }
 
                         // If it's a command, broadcast echo to all OTHER clients so everyone sees it!
                         if (packet.type == "COMMAND")
@@ -615,11 +640,14 @@ namespace DuskersCoopMod.Network
                 });
                 _singleWriter.WriteLine(hello);
 
-                EnqueueIncoming(new PacketWrapper
+                lock (_incomingLock)
                 {
-                    type = "SYSTEM_LOG",
-                    data = $"[COOP] Connected to Host at {_remoteInfo}! Shared terminal bridge active."
-                });
+                    _incomingQueueV2.Enqueue(new IncomingPacket(new PacketWrapper
+                    {
+                        type = "SYSTEM_LOG",
+                        data = $"[COOP] Connected to Host at {_remoteInfo}! Shared terminal bridge active."
+                    }, null));
+                }
 
                 while (_isRunning && _isConnected && _singleClientSocket != null && _singleClientSocket.Connected)
                 {
@@ -635,11 +663,14 @@ namespace DuskersCoopMod.Network
             }
             catch (Exception ex)
             {
-                EnqueueIncoming(new PacketWrapper
+                lock (_incomingLock)
                 {
-                    type = "SYSTEM_LOG",
-                    data = $"[COOP] Connection failed: {ex.Message}"
-                });
+                    _incomingQueueV2.Enqueue(new IncomingPacket(new PacketWrapper
+                    {
+                        type = "SYSTEM_LOG",
+                        data = $"[COOP] Connection failed: {ex.Message}"
+                    }, null));
+                }
             }
             finally
             {
@@ -655,7 +686,18 @@ namespace DuskersCoopMod.Network
             }
         }
 
-        private void ProcessPacket(PacketWrapper packet)
+        // Overload used by Steam path so it still works without sender info
+        public void EnqueueIncomingWithSender(PacketWrapper packet, ConnectedClient sender)
+        {
+            lock (_incomingLock)
+            {
+                _incomingQueueV2.Enqueue(new IncomingPacket(packet, sender));
+            }
+        }
+
+        // sender is the ConnectedClient who originated this packet (null for Host-local or Steam).
+        // Used to avoid echoing swap/tow actions back to the originator.
+        private void ProcessPacket(PacketWrapper packet, ConnectedClient sender = null)
         {
             if (packet == null) return;
 
@@ -752,7 +794,8 @@ namespace DuskersCoopMod.Network
                         if (swapData != null)
                         {
                             ApplySwapUpgrades(swapData);
-                            BroadcastPacket(PacketWrapper.Create("SWAP_UPGRADES", "Host", swapData));
+                            // Bug 5 fix: exclude the originating client so they don't apply the swap twice
+                            BroadcastPacket(PacketWrapper.Create("SWAP_UPGRADES", "Host", swapData), exclude: sender);
                         }
                     }
                     break;
@@ -764,6 +807,46 @@ namespace DuskersCoopMod.Network
                         if (swapData != null)
                         {
                             ApplySwapUpgrades(swapData);
+                        }
+                    }
+                    break;
+
+                case "DUNGEON_SEED":
+                    // Bug 1 fix: apply the authoritative dungeon seed so the client generates
+                    // exactly the same layout as the Host.
+                    if (Role == NetworkRole.Client)
+                    {
+                        var seedData = packet.GetData<DungeonSeedPacket>();
+                        if (seedData != null && seedData.seed != 0)
+                        {
+                            Patches.DungeonPatches.SynchronizedDungeonSeed = seedData.seed;
+                            UnityEngine.Random.seed = seedData.seed;
+                            Debug.Log($"[DuskersCoopMod] DUNGEON_SEED received: {seedData.seed} (group: {seedData.dungeonGroup})");
+                        }
+                    }
+                    break;
+
+                case "DRONE_TOW_SYNC":
+                    // Bug 4 fix: replicate tow state on the client
+                    if (Role == NetworkRole.Client)
+                    {
+                        var towData = packet.GetData<DroneTowSyncPacket>();
+                        if (towData != null)
+                        {
+                            ApplyDroneTowSync(towData);
+                        }
+                    }
+                    break;
+
+                case "CLIENT_DRONE_TOW":
+                    // Bug 4 fix: client requested a tow action — apply on Host and broadcast
+                    if (Role == NetworkRole.Host)
+                    {
+                        var towData = packet.GetData<DroneTowSyncPacket>();
+                        if (towData != null)
+                        {
+                            ApplyDroneTowSync(towData);
+                            BroadcastPacket(PacketWrapper.Create("DRONE_TOW_SYNC", "Host", towData), exclude: sender);
                         }
                     }
                     break;
@@ -1959,6 +2042,18 @@ namespace DuskersCoopMod.Network
         {
             if (string.IsNullOrEmpty(command) || ConsoleWindow3.Instance == null) return;
 
+            // Bug 3 fix: save whatever the player was currently typing so we can restore it
+            // after the remote command is injected, preventing the terminal from wiping their input.
+            string savedInput = null;
+            int savedCursor = 0;
+            try
+            {
+                var tr = Traverse.Create(ConsoleWindow3.Instance);
+                savedInput = tr.Field("_commandText").GetValue<string>() ?? "";
+                savedCursor = tr.Field("_cursorPosition").GetValue<int>();
+            }
+            catch { }
+
             Patches.ConsolePatches.IsExecutingRemoteCommand = true;
             try
             {
@@ -1971,26 +2066,115 @@ namespace DuskersCoopMod.Network
             finally
             {
                 Patches.ConsolePatches.IsExecutingRemoteCommand = false;
+
+                // Restore the player's in-progress input
+                if (savedInput != null)
+                {
+                    try
+                    {
+                        var tr = Traverse.Create(ConsoleWindow3.Instance);
+                        tr.Field("_commandText").SetValue(savedInput);
+                        int restoredCursor = Math.Min(savedCursor, savedInput.Length);
+                        tr.Field("_cursorPosition").SetValue(restoredCursor);
+                        tr.Method("RefreshCurrentLine").GetValue();
+                    }
+                    catch { }
+                }
             }
         }
 
         public void ExecuteAuthoritativeCommand(string command)
         {
-            if (ConsoleWindow3.Instance != null)
+            if (ConsoleWindow3.Instance == null) return;
+
+            // Bug 3 fix: same as ExecuteLocalCommand — save and restore player's typed input
+            string savedInput = null;
+            int savedCursor = 0;
+            try
             {
-                Patches.ConsolePatches.IsExecutingRemoteCommand = true;
-                try
+                var tr = Traverse.Create(ConsoleWindow3.Instance);
+                savedInput = tr.Field("_commandText").GetValue<string>() ?? "";
+                savedCursor = tr.Field("_cursorPosition").GetValue<int>();
+            }
+            catch { }
+
+            Patches.ConsolePatches.IsExecutingRemoteCommand = true;
+            try
+            {
+                ConsoleWindow3.Instance.InjectCommandText(command);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[DuskersCoopMod] Error executing authoritative command '{command}': {ex}");
+            }
+            finally
+            {
+                Patches.ConsolePatches.IsExecutingRemoteCommand = false;
+
+                if (savedInput != null)
                 {
-                    ConsoleWindow3.Instance.InjectCommandText(command);
+                    try
+                    {
+                        var tr = Traverse.Create(ConsoleWindow3.Instance);
+                        tr.Field("_commandText").SetValue(savedInput);
+                        int restoredCursor = Math.Min(savedCursor, savedInput.Length);
+                        tr.Field("_cursorPosition").SetValue(restoredCursor);
+                        tr.Method("RefreshCurrentLine").GetValue();
+                    }
+                    catch { }
                 }
-                catch (Exception ex)
+            }
+        }
+
+        // Bug 4 fix: apply tow/release state received from the network.
+        // Looks for the "carry" relationship between drones via Reflection since Duskers
+        // does not expose a clean API for this.
+        private void ApplyDroneTowSync(DroneTowSyncPacket packet)
+        {
+            if (packet == null || DroneManager.Instance == null || DroneManager.Instance.dronesList == null) return;
+            try
+            {
+                var tower = DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.towerDroneNumber);
+                var towed  = packet.towedDroneNumber >= 0
+                    ? DroneManager.Instance.dronesList.Find(d => d != null && d.DroneNumber == packet.towedDroneNumber)
+                    : null;
+
+                if (tower == null) return;
+
+                if (packet.isTowing && towed != null)
                 {
-                    Debug.LogError($"[DuskersCoopMod] Error executing authoritative command '{command}': {ex}");
+                    // Try to set the "_towedDrone" / "towedDrone" field on the tower drone
+                    var towedField = Traverse.Create(tower).Field("_towedDrone");
+                    if (towedField == null || towedField.GetValue<object>() == null)
+                        towedField = Traverse.Create(tower).Field("towedDrone");
+                    if (towedField != null)
+                    {
+                        towedField.SetValue(towed);
+                        Debug.Log($"[DuskersCoopMod] TowSync: Drone {tower.DroneNumber} now towing Drone {towed.DroneNumber}");
+                    }
+
+                    // Also keep the towed drone positioned inside the tower's bounds immediately
+                    Vector3 towerPos = tower.GetDronePosition();
+                    towed.MoveToPosition(towerPos);
+                    towed.LastPosition = towerPos;
+                    SyncDroneVisualHierarchy(towed);
                 }
-                finally
+                else
                 {
-                    Patches.ConsolePatches.IsExecutingRemoteCommand = false;
+                    // Release: clear the reference on tower
+                    var towedField = Traverse.Create(tower).Field("_towedDrone");
+                    if (towedField == null || towedField.GetValue<object>() == null)
+                        towedField = Traverse.Create(tower).Field("towedDrone");
+                    if (towedField != null)
+                    {
+                        towedField.SetValue(null);
+                        Debug.Log($"[DuskersCoopMod] TowSync: Drone {tower.DroneNumber} released tow.");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[DuskersCoopMod] ApplyDroneTowSync error: {ex.Message}");
             }
         }
 

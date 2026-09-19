@@ -195,6 +195,23 @@ namespace DuskersCoopMod.Network
     {
         public System.Collections.Generic.List<DroneUpgradesSyncItem> drones = new System.Collections.Generic.List<DroneUpgradesSyncItem>();
     }
+
+    // Synchronizes the random seed used to generate the dungeon layout.
+    // Sent by Host to all clients BEFORE the DungeonManager.Awake fires, so both sides
+    // generate the exact same room names, corridors and layout.
+    [Serializable]
+    public class DungeonSeedPacket
+    {
+        public int seed;
+        public string dungeonGroup; // GroupKey of the dungeon, for verification
+    }
+
+    // Synchronizes tow (drone carrying another drone) state.
+    [Serializable]
+    public class DroneTowSyncPacket
+    {
+        public int towerDroneNumber;  // drone doing the towing
+        public int towedDroneNumber;  // drone being towed (-1 = none / release)
+        public bool isTowing;         // true = started tow, false = released
+    }
 }
-
-

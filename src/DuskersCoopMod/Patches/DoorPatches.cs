@@ -14,7 +14,9 @@ namespace DuskersCoopMod.Patches
         [HarmonyPatch("open", new Type[] { typeof(bool), typeof(bool) })]
         public static void Open_Postfix(Door __instance, bool __result)
         {
-            if (IsApplyingDoorSync || ConsolePatches.IsExecutingRemoteCommand) return;
+            // NOTE: IsExecutingRemoteCommand guard removed intentionally — the Host must always
+            // broadcast the authoritative door state, including when executing a client's command.
+            if (IsApplyingDoorSync) return;
             var net = CoopNetworkManager.Instance;
             if (net == null || !net.IsConnected) return;
 
@@ -31,7 +33,9 @@ namespace DuskersCoopMod.Patches
         [HarmonyPatch("CloseDoor")]
         public static void CloseDoor_Postfix(Door __instance)
         {
-            if (IsApplyingDoorSync || ConsolePatches.IsExecutingRemoteCommand) return;
+            // NOTE: IsExecutingRemoteCommand guard removed intentionally — the Host must always
+            // broadcast the authoritative door state, including when executing a client's command.
+            if (IsApplyingDoorSync) return;
             var net = CoopNetworkManager.Instance;
             if (net == null || !net.IsConnected) return;
 
